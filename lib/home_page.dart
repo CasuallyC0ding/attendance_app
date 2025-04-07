@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'sign_in_page.dart';
+import 'create_account_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
-
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
@@ -89,7 +89,14 @@ class HomePage extends StatelessWidget {
                           icon: Icons.person_add,
                           text: 'Create Account',
                           color: primaryColor,
-                          onPressed: () {},
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const CreateAccountPage(),
+                              ),
+                            );
+                          },
                         ),
                         const SizedBox(height: 30),
                         Text(
