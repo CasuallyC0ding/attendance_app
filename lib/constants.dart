@@ -1,0 +1,3 @@
+
+String globalEmail = '';
+String globalPassword = '';
