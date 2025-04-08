@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'sign_in_page.dart';
 import 'create_account_page.dart';
+import 'package:attendance_app/attendance_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -94,6 +95,21 @@ class HomePage extends StatelessWidget {
                               context,
                               MaterialPageRoute(
                                 builder: (context) => const CreateAccountPage(),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                        // Add in the HomePage's widget list
+                        _buildAuthButton(
+                          icon: Icons.bluetooth,
+                          text: 'Take Attendance',
+                          color: Colors.deepPurple,
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const AttendancePage(),
                               ),
                             );
                           },
