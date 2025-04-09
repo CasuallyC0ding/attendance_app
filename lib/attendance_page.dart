@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -16,6 +18,8 @@ class _AttendancePageState extends State<AttendancePage> {
   int _rssi = 0;
   bool _isScanning = false;
   String _status = 'Searching for device...';
+  late StreamSubscription<List<ScanResult>> _scanSubscription;
+  bool _attendanceTaken = false; // Add this new state variable
 
   @override
   void initState() {
@@ -25,34 +29,75 @@ class _AttendancePageState extends State<AttendancePage> {
 
   Future<void> _startScan() async {
     try {
-      // Request permissions
-      await Permission.location.request();
+      // 1. Check if Bluetooth is enabled
+      if (!await FlutterBluePlus.isAvailable) {
+        throw Exception("Bluetooth not supported");
+      }
+      if (!await FlutterBluePlus.isOn) {
+        throw Exception("Bluetooth is off");
+      }
 
-      setState(() => _isScanning = true);
+      // 2. Android 12+ permissions
+      if (await Permission.bluetoothScan.request().isDenied ||
+          await Permission.bluetoothConnect.request().isDenied ||
+          await Permission.location.request().isDenied) {
+        throw Exception("Permissions denied");
+      }
 
-      FlutterBluePlus.scanResults.listen((results) {
+      setState(() {
+        _isScanning = true;
+        _status = "Scanning...";
+        _attendanceTaken = false; // Reset when starting new scan
+      });
+
+      _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
+        bool foundDevice = false;
+        
         for (ScanResult result in results) {
-          if (result.device.remoteId.toString().toUpperCase() ==
-              targetDeviceAddress.replaceAll(':', '')) {
+          String deviceId = result.device.remoteId.toString().toUpperCase();
+          String targetId = targetDeviceAddress.replaceAll(':', '').toUpperCase();
+          
+          if (deviceId == targetId) {
+            foundDevice = true;
             setState(() {
-              _targetDevice = result.device;
               _rssi = result.rssi;
-              _status = 'Attendance Taken';
+              if (!_attendanceTaken) {
+                _status = 'Attendance Taken';
+                _attendanceTaken = true;
+              }
             });
-            FlutterBluePlus.stopScan();
-            return;
           }
+        }
+
+        if (!foundDevice && _attendanceTaken) {
+          setState(() {
+            _status = 'Device out of range';
+          });
         }
       });
 
-      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
+      // Start continuous scan without timeout
+      await FlutterBluePlus.startScan();
     } catch (e) {
-      setState(() => _status = 'Error: ${e.toString()}');
+      setState(() => _status = _parseError(e));
     } finally {
+      if (FlutterBluePlus.isScanningNow) {
+        await FlutterBluePlus.stopScan();
+      }
       setState(() => _isScanning = false);
     }
   }
 
+  String _parseError(dynamic error) {
+    String message = error.toString();
+    if (message.contains("PlatformException(3")) {
+      return "Bluetooth is disabled";
+    } else if (message.contains("Permissions denied")) {
+      return "Enable Bluetooth permissions";
+    } else {
+      return "Error: ${error.toString().split(':').last.trim()}";
+    }
+  }
   @override
   Widget build(BuildContext context) {
     const Color primaryColor = Color(0xFF6A1B9A);
@@ -149,6 +194,7 @@ class _AttendancePageState extends State<AttendancePage> {
 
   @override
   void dispose() {
+    _scanSubscription.cancel();
     FlutterBluePlus.stopScan();
     super.dispose();
   }
