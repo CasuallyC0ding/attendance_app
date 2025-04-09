@@ -11,7 +11,7 @@ class AttendancePage extends StatefulWidget {
 }
 
 class _AttendancePageState extends State<AttendancePage> {
-  final String targetDeviceAddress = 'BC:57:29:02:99:87';
+  final String targetDeviceAddress = 'BC:57:29:00:4B:3A';
   BluetoothDevice? _targetDevice;
   int _rssi = 0;
   bool _isScanning = false;

@@ -5,9 +5,8 @@ plugins {
 }
 
 android {
-    compileSdk = 35
     namespace = "com.example.attendance_app"
-    compileSdk = 33  // Use numeric value directly
+    compileSdk = 35  // Changed from 33 to 34
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -15,7 +14,15 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+        jvmTarget = "17"
+    }
+
+    defaultConfig {
+        applicationId = "com.example.attendance_app"
+        minSdk = 21  // You can keep this as is
+        targetSdk = 34  // Changed from 33 to 34
+        versionCode = 1
+        versionName = "1.0.0"
     }
 
     defaultConfig {
