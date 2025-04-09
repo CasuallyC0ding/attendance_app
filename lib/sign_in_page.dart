@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'constants.dart';
@@ -109,9 +110,22 @@ class _SignInPageState extends State<SignInPage> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: () {
+                            onPressed: () async{
                               if (_formKey.currentState!.validate()) {
                                 // Sign in logic
+                                await FirebaseAuth.instance.signInWithEmailAndPassword(
+                                  email: globalEmail,
+                                  password: globalPassword,
+                                ).then((value) {
+                                  Navigator.pushReplacementNamed(context, '/home');
+                                }).catchError((error) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(error.toString()),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                });
                               }
                             },
                             style: ElevatedButton.styleFrom(

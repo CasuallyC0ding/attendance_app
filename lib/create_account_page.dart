@@ -1,3 +1,5 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'constants.dart';
@@ -88,7 +90,7 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                           validator: (value) {
                             if (value == null || value.isEmpty) {
                               return 'Please enter your email';
-                            }
+                            } 
                             return null;
                           },
                         ),
@@ -168,20 +170,32 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: () {
+                            onPressed: () async{
                               if (_formKey.currentState!.validate()) {
                                 globalPassword = _passwordController.text;
 
                                 // Add your actual account creation logic here
-                                print('Account Created with:');
-                                print('Email: $globalEmail');
-                                print('Password: $globalPassword');
+                                //print('Account Created with:');
+                                //print('Email: $globalEmail');
+                                //print('Password: $globalPassword');
+                                // Example: Firebase Auth
+                                await FirebaseAuth.instance.createUserWithEmailAndPassword(email: globalEmail, password: globalPassword).then((userCredential) {
+                                  // Account created successfully
+                                  print('Account created successfully!');
+                                }).catchError((error) {
+                                  // Handle error
+                                  print('Error creating account: $error');
+                                });
 
                                 // Navigate to homepage
                                 Navigator.pushReplacement(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => const HomePage(),
+                                    builder: (context) {
+                                      Future.delayed(const Duration(seconds: 3));
+                                      return const HomePage();
+                                    },
+                                    //builder: (context) => const HomePage(),
                                   ),
                                 );
                               }
