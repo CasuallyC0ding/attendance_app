@@ -3,6 +3,9 @@ plugins {
     // START: FlutterFire Configuration
     id("com.google.gms.google-services")
     // END: FlutterFire Configuration
+    // START: FlutterFire Configuration
+    id("com.google.gms.google-services")
+    // END: FlutterFire Configuration
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
 }
@@ -30,7 +33,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.attendance_app"
-        minSdk = 21
+        minSdk = 23
         targetSdk = 33
         versionCode = 1  // Use explicit value
         versionName = "1.0.0"

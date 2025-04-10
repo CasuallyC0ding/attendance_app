@@ -1,3 +1,5 @@
+
+import 'package:device_preview/device_preview.dart';
 import 'package:attendance_app/firebase_options.dart';
 import 'package:device_preview/device_preview.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -6,9 +8,31 @@ import 'home_page.dart';
 import 'sign_in_page.dart';
 import 'create_account_page.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:attendance_app/firebase_options.dart';
+
+import 'HomePage.dart';
+import 'LogInPage.dart';
+import 'Take_Attendence.dart';
+import 'AttendanceTrackerPage.dart';
+import 'AttendanceRecordPage.dart';
+import 'creat_account_page.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    print('Firebase initialization error: $e');
+    // You might want to show an error screen here
+  }
+
+  runApp(DevicePreview(builder: (context)=>MyApp()));
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -23,6 +47,10 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'The Attender',
+      theme: ThemeData(
+        primarySwatch: Colors.deepPurple,
+        textTheme: GoogleFonts.poppinsTextTheme(Theme.of(context).textTheme),
+      ),
       theme: ThemeData(primarySwatch: Colors.deepPurple, fontFamily: 'Poppins'),
       // Use either home or initialRoute, not both
       home: const HomePage(),
@@ -31,6 +59,28 @@ class MyApp extends StatelessWidget {
         '/createaccount': (context) => const CreateAccountPage(),
       },
       debugShowCheckedModeBanner: false,
+      routes: {
+        '/login': (context) => const LogInPage(),
+        '/createAccount': (context) => const CreateAccountPage(),
+        '/attendanceTracker': (context) => const AttendanceTrackerPage(),
+        '/attendanceTrack': (context) => const AttendanceTrackerPage(),
+        //'/takeAttendance': (context) => const Take_Attendence(),
+        //'/attendanceRecord': (context) => const AttendanceRecordPage(),
+      },
+    );
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
     );
   }
 }
