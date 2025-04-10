@@ -9,17 +9,14 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-void main() async{
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
   //runApp(DevicePreview(builder: (context)=> const MyApp()));
 }
 
 class MyApp extends StatelessWidget {
-
   const MyApp({super.key});
 
   @override
@@ -37,7 +34,6 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -115,7 +111,9 @@ class HomePage extends StatelessWidget {
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (context) => const LogInPage()),
+                              MaterialPageRoute(
+                                builder: (context) => const LogInPage(),
+                              ),
                             );
                           },
                         ),
@@ -254,13 +252,14 @@ class LogInPage extends StatelessWidget {
                 const Icon(
                   Icons.event_available,
                   color: Colors.white,
-                  size: 30,  // Adjusted size of the icon
+                  size: 30, // Adjusted size of the icon
                 ),
                 const SizedBox(width: 10),
                 Text(
                   'The Attender',
                   style: GoogleFonts.poppins(
-                    fontSize: 18,  // Adjusted font size to make it smaller like a logo
+                    fontSize:
+                        18, // Adjusted font size to make it smaller like a logo
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -283,7 +282,9 @@ class LogInPage extends StatelessWidget {
           padding: const EdgeInsets.all(20.0),
           child: Center(
             child: Container(
-              width: MediaQuery.of(context).size.width * 0.8, // 80% of screen width
+              width:
+                  MediaQuery.of(context).size.width *
+                  0.8, // 80% of screen width
               padding: const EdgeInsets.all(20.0),
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -297,7 +298,9 @@ class LogInPage extends StatelessWidget {
                 ],
               ),
               child: Column(
-                mainAxisSize: MainAxisSize.min, // Ensure it only takes as much height as needed
+                mainAxisSize:
+                    MainAxisSize
+                        .min, // Ensure it only takes as much height as needed
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
@@ -335,14 +338,21 @@ class LogInPage extends StatelessWidget {
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const AttendanceTrackerPage()),
+                        MaterialPageRoute(
+                          builder: (context) => const AttendanceTrackerPage(),
+                        ),
                       );
                       // Handle Attendence logic here
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF00BFA5),
-                      padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 15,
+                        horizontal: 20,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
                       elevation: 5,
                     ),
                     child: Text(
@@ -351,7 +361,18 @@ class LogInPage extends StatelessWidget {
                         fontSize: 18,
                         fontWeight: FontWeight.w500,
                         color: Colors.white,
-                      ),),),],),),),),),);}}
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class AttendanceTrackerPage extends StatelessWidget {
   const AttendanceTrackerPage({super.key});
@@ -363,27 +384,31 @@ class AttendanceTrackerPage extends StatelessWidget {
         backgroundColor: const Color(0xFF4A148C),
         centerTitle: true,
         automaticallyImplyLeading: false,
-          actions: [
-      Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.event_available,
-            color: Colors.white,
-            size: 30,  // Adjusted size of the icon
-          ),
-          const SizedBox(width: 10),
-          Text(
-            'The Attender',
-            style: GoogleFonts.poppins(
-              fontSize: 18,  // Adjusted font size to make it smaller like a logo
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.event_available,
+                  color: Colors.white,
+                  size: 30, // Adjusted size of the icon
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'The Attender',
+                  style: GoogleFonts.poppins(
+                    fontSize:
+                        18, // Adjusted font size to make it smaller like a logo
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
-      ),),],),
+      ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -482,13 +507,22 @@ class AttendanceTrackerPage extends StatelessWidget {
                               ),
                               const SizedBox(height: 10),
                               ElevatedButton(
-                                onPressed: () {},
+                                onPressed: () {
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) =>
+                                            const AttendanceTrackerPage(),
+                                  );
+                                },
                                 style: ElevatedButton.styleFrom(
                                   shape: const CircleBorder(),
                                   padding: const EdgeInsets.all(20),
                                   backgroundColor: Colors.deepPurple,
                                 ),
-                                child: const Icon(Icons.check, color: Colors.white),
+                                child: const Icon(
+                                  Icons.check,
+                                  color: Colors.white,
+                                ),
                               ),
                             ],
                           ),
@@ -521,7 +555,10 @@ class AttendanceTrackerPage extends StatelessWidget {
                                   padding: const EdgeInsets.all(20),
                                   backgroundColor: Colors.deepPurple,
                                 ),
-                                child: const Icon(Icons.history, color: Colors.white),
+                                child: const Icon(
+                                  Icons.history,
+                                  color: Colors.white,
+                                ),
                               ),
                             ],
                           ),
@@ -553,11 +590,26 @@ class AttendanceTrackerPage extends StatelessWidget {
                       underline: const SizedBox(),
                       value: 'Course 1',
                       items: const [
-                        DropdownMenuItem(value: 'Course 1', child: Text('COMM604')),
-                        DropdownMenuItem(value: 'Course 2', child: Text('NETW603')),
-                        DropdownMenuItem(value: 'Course 3', child: Text('MNGT601')),
-                        DropdownMenuItem(value: 'Course 4', child: Text('NETW703')),
-                        DropdownMenuItem(value: 'Course 5', child: Text('NETW707')),
+                        DropdownMenuItem(
+                          value: 'Course 1',
+                          child: Text('COMM604'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Course 2',
+                          child: Text('NETW603'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Course 3',
+                          child: Text('MNGT601'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Course 4',
+                          child: Text('NETW703'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Course 5',
+                          child: Text('NETW707'),
+                        ),
                       ],
                       onChanged: (value) {
                         // Handle course change
@@ -571,7 +623,9 @@ class AttendanceTrackerPage extends StatelessWidget {
                       onPressed: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => const HomePage()),
+                          MaterialPageRoute(
+                            builder: (context) => const HomePage(),
+                          ),
                         );
                       },
                       icon: const Icon(Icons.home),
@@ -582,7 +636,9 @@ class AttendanceTrackerPage extends StatelessWidget {
                           borderRadius: BorderRadius.circular(30),
                         ),
                         padding: const EdgeInsets.symmetric(
-                            vertical: 12.0, horizontal: 24.0),
+                          vertical: 12.0,
+                          horizontal: 24.0,
+                        ),
                       ),
                     ),
                   ),
@@ -595,12 +651,3 @@ class AttendanceTrackerPage extends StatelessWidget {
     );
   }
 }
-
-
-
-
-
-
-
-
-
