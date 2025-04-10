@@ -83,9 +83,11 @@ class AttendanceRecordPage extends StatelessWidget {
     );
   }
 }*/
+import 'package:attendance_app/attendance_page.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'HomePage.dart';
+import 'AttendanceTrackerPage.dart';
 
 class AttendanceRecordPage extends StatelessWidget {
   final String course;
@@ -103,7 +105,7 @@ class AttendanceRecordPage extends StatelessWidget {
           onPressed: () {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (context) => const HomePage()),
+              MaterialPageRoute(builder: (context) => const AttendanceTrackerPage()),
             );
           },
         ),
