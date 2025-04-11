@@ -299,12 +299,13 @@ class _AttendanceTrackerPageState extends State<AttendanceTrackerPage> {
     );
   }
 }*/
+import 'package:attendance_app/attendance_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'HomePage.dart';
 import 'AttendanceRecordPage.dart';
-import 'Take_Attendence.dart';
+//import 'take_attendance_page.dart';
 
 class AttendanceTrackerPage extends StatefulWidget {
   const AttendanceTrackerPage({super.key});
@@ -371,7 +372,7 @@ class _AttendanceTrackerPageState extends State<AttendanceTrackerPage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => TakeAttendence(selectedCourse: course),
+        builder: (context) => AttendancePage(),
       ),
     );
   }

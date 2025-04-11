@@ -7,9 +7,9 @@ import 'package:attendance_app/firebase_options.dart';
 
 import 'HomePage.dart';
 import 'LogInPage.dart';
-import 'Take_Attendence.dart';
+//import 'take_attendance_page.dart';
 import 'AttendanceTrackerPage.dart';
-import 'AttendanceRecordPage.dart';
+//import 'AttendanceRecordPage.dart';
 import 'creat_account_page.dart';
 
 void main() async {

@@ -83,10 +83,10 @@ class AttendanceRecordPage extends StatelessWidget {
     );
   }
 }*/
-import 'package:attendance_app/attendance_page.dart';
+//import 'package:attendance_app/attendance_page.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'HomePage.dart';
+//import 'HomePage.dart';
 import 'AttendanceTrackerPage.dart';
 
 class AttendanceRecordPage extends StatelessWidget {
