@@ -35,7 +35,7 @@ class _AttendancePageState extends State<AttendancePage> {
     devices.clear();
     setState(() => isScanning = true);
 
-    FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
+    FlutterBluePlus.startScan(timeout: const Duration(seconds: 1000));
 
     FlutterBluePlus.scanResults.listen((results) async {
       for (ScanResult result in results) {
