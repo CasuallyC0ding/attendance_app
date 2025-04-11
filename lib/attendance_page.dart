@@ -49,12 +49,11 @@ class _AttendancePageState extends State<AttendancePage> {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder:
-                  (_) => AttendanceSuccessPage(
-                    mac: mac,
-                    distance: distance,
-                    timestamp: DateTime.now(),
-                  ),
+              builder: (_) => AttendanceSuccessPage(
+                mac: mac,
+                distance: distance,
+                timestamp: DateTime.now(),
+              ),
             ),
           );
           return;
@@ -76,6 +75,32 @@ class _AttendancePageState extends State<AttendancePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF4A148C),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                const Icon(Icons.event_available, color: Colors.white, size: 24),
+                const SizedBox(width: 8),
+                Text(
+                  'The Attender',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -131,6 +156,22 @@ class _AttendancePageState extends State<AttendancePage> {
                         subtitle: Text(
                           'MAC: ${device.device.remoteId.str}\nEst. Distance: $distance m',
                           style: GoogleFonts.poppins(fontSize: 13),
+                        ),
+                        trailing: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.deepPurple.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            'RSSI: ${device.rssi}',
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.deepPurple,
+                            ),
+                          ),
                         ),
                       );
                     },
