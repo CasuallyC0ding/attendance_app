@@ -22,17 +22,9 @@ android {
 
     defaultConfig {
         applicationId = "com.example.attendance_app"
-        minSdk = 21  // You can keep this as is
+        minSdk = 23  // You can keep this as is
         targetSdk = 34  // Changed from 33 to 34
         versionCode = 1
-        versionName = "1.0.0"
-    }
-
-    defaultConfig {
-        applicationId = "com.example.attendance_app"
-        minSdk = 21
-        targetSdk = 33
-        versionCode = 1  // Use explicit value
         versionName = "1.0.0"
     }
 

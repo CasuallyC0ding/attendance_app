@@ -1,3 +1,4 @@
+import 'package:attendance_app/attendance_page.dart';
 import 'package:attendance_app/firebase_options.dart';
 import 'package:device_preview/device_preview.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -482,8 +483,15 @@ class AttendanceTrackerPage extends StatelessWidget {
                               ),
                               const SizedBox(height: 10),
                               ElevatedButton(
-                                onPressed: () {},
-                                style: ElevatedButton.styleFrom(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => const AttendancePage(),
+                                    ),
+                                  );
+                                },
+                                  style: ElevatedButton.styleFrom(
                                   shape: const CircleBorder(),
                                   padding: const EdgeInsets.all(20),
                                   backgroundColor: Colors.deepPurple,
