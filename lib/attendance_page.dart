@@ -49,11 +49,12 @@ class _AttendancePageState extends State<AttendancePage> {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (_) => AttendanceSuccessPage(
-                mac: mac,
-                distance: distance,
-                timestamp: DateTime.now(),
-              ),
+              builder:
+                  (_) => AttendanceSuccessPage(
+                    mac: mac,
+                    distance: distance,
+                    timestamp: DateTime.now(),
+                  ),
             ),
           );
           return;
@@ -116,8 +117,9 @@ class _AttendancePageState extends State<AttendancePage> {
                     itemCount: devices.length,
                     itemBuilder: (context, index) {
                       final device = devices[index];
-                      final distance =
-                          _calculateDistance(device.rssi).toStringAsFixed(2);
+                      final distance = _calculateDistance(
+                        device.rssi,
+                      ).toStringAsFixed(2);
                       return ListTile(
                         leading: const Icon(Icons.bluetooth),
                         title: Text(

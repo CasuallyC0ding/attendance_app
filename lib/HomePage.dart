@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'sign_in_page.dart';
-import 'create_account_page.dart';
-import 'package:attendance_app/attendance_page.dart';
+import 'LogInPage.dart';
+import 'creat_account_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -13,9 +12,6 @@ class HomePage extends StatelessWidget {
     // Custom color palette
     const Color primaryColor = Color(0xFF6A1B9A);
     const Color accentColor = Color(0xFF00BFA5);
-    const Color facebookColor = Color(0xFF3B5998);
-    const Color googleColor = Color(0xFFDB4437);
-
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -50,7 +46,7 @@ class HomePage extends StatelessWidget {
                   ],
                 ),
               ),
-              SizedBox(height: screenHeight * 0.1),
+              SizedBox(height: screenHeight * 0.05), // Reduced spacing
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 40),
                 child: Card(
@@ -72,15 +68,16 @@ class HomePage extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 30),
+                        const SizedBox(height: 20),
                         _buildAuthButton(
                           icon: Icons.login,
-                          text: 'Sign In',
+                          text: 'Log In',
                           color: accentColor,
                           onPressed: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const SignInPage(),
+                                builder: (context) => const LogInPage(),
                               ),
                             );
                           },
@@ -98,46 +95,6 @@ class HomePage extends StatelessWidget {
                               ),
                             );
                           },
-                        ),
-                        const SizedBox(height: 20),
-                        // Add in the HomePage's widget list
-                        _buildAuthButton(
-                          icon: Icons.bluetooth,
-                          text: 'Take Attendance',
-                          color: Colors.deepPurple,
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const AttendancePage(),
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 30),
-                        Text(
-                          'Or continue with',
-                          style: GoogleFonts.poppins(
-                            color: Colors.grey,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _buildSocialButton(
-                              icon: Icons.facebook,
-                              color: facebookColor,
-                              onPressed: () {},
-                            ),
-                            const SizedBox(width: 20),
-                            _buildSocialButton(
-                              icon: Icons.g_mobiledata,
-                              color: googleColor,
-                              onPressed: () {},
-                            ),
-                          ],
                         ),
                       ],
                     ),
@@ -190,22 +147,6 @@ class HomePage extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSocialButton({
-    required IconData icon,
-    required Color color,
-    required VoidCallback onPressed,
-  }) {
-    return IconButton(
-      onPressed: onPressed,
-      icon: Icon(icon, size: 32),
-      style: IconButton.styleFrom(
-        backgroundColor: color,
-        padding: const EdgeInsets.all(15),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
