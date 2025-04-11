@@ -7,9 +7,7 @@ import 'package:attendance_app/firebase_options.dart';
 
 import 'HomePage.dart';
 import 'LogInPage.dart';
-//import 'take_attendance_page.dart';
 import 'AttendanceTrackerPage.dart';
-//import 'AttendanceRecordPage.dart';
 import 'creat_account_page.dart';
 
 void main() async {
@@ -24,7 +22,7 @@ void main() async {
     // You might want to show an error screen here
   }
 
-  runApp(DevicePreview(builder: (context)=>MyApp()));
+  runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -45,8 +43,6 @@ class MyApp extends StatelessWidget {
         '/createAccount': (context) => const CreateAccountPage(),
         '/attendanceTracker': (context) => const AttendanceTrackerPage(),
         '/attendanceTrack': (context) => const AttendanceTrackerPage(),
-        //'/takeAttendance': (context) => const Take_Attendence(),
-        //'/attendanceRecord': (context) => const AttendanceRecordPage(),
       },
     );
   }
