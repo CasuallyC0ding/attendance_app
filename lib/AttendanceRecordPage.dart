@@ -1,9 +1,11 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'AttendanceTrackerPage.dart';
 
 class AttendanceRecordPage extends StatelessWidget {
   final String course;
+  //final FirebaseFirestore firestore = FirebaseFirestore.instance;
 
   const AttendanceRecordPage({Key? key, required this.course}) : super(key: key);
 
