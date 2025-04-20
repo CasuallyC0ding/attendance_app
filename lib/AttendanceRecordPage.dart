@@ -3,11 +3,53 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'AttendanceTrackerPage.dart';
 
-class AttendanceRecordPage extends StatelessWidget {
+class AttendanceRecordPage extends StatefulWidget {
   final String course;
-  //final FirebaseFirestore firestore = FirebaseFirestore.instance;
 
   const AttendanceRecordPage({Key? key, required this.course}) : super(key: key);
+
+  @override
+  _AttendanceRecordPageState createState() => _AttendanceRecordPageState();
+}
+
+class _AttendanceRecordPageState extends State<AttendanceRecordPage> {
+  late Future<Map<String, dynamic>?> _attendanceData;
+  final String documentId = 'RePgzpGQJfSSVh5QJEMK'; // Your document ID
+
+  @override
+  void initState() {
+    super.initState();
+    _attendanceData = _fetchAttendanceData();
+  }
+
+  Future<Map<String, dynamic>?> _fetchAttendanceData() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('Attendance Record')
+          .doc(documentId)
+          .get();
+
+      if (doc.exists) {
+        return doc.data()?[widget.course] as Map<String, dynamic>?;
+      }
+      return null;
+    } catch (e) {
+      print('Error fetching attendance data: $e');
+      return null;
+    }
+  }
+
+  String _formatLastAttended(Timestamp? timestamp) {
+    if (timestamp == null) return 'Never attended';
+    final date = timestamp.toDate();
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  String _calculatePercentage(int? attended, int? total) {
+    if (attended == null || total == null || total == 0) return '0% (0/0 classes)';
+    final percentage = (attended / total * 100).round();
+    return '$percentage% ($attended/$total classes)';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -77,7 +119,7 @@ class AttendanceRecordPage extends StatelessWidget {
               // White box containing the table
               Container(
                 width: MediaQuery.of(context).size.width * 0.9,
-                padding: const EdgeInsets.all(0), // Remove padding here
+                padding: const EdgeInsets.all(0),
                 margin: const EdgeInsets.only(bottom: 30),
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -90,60 +132,108 @@ class AttendanceRecordPage extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(15),
-                  child: Table(
-                    border: TableBorder.all(
-                      color: Colors.grey.shade300,
-                      width: 1,
-                    ),
-                    columnWidths: const {
-                      0: FlexColumnWidth(1),
-                      1: FlexColumnWidth(1.5),
-                    },
-                    children: [
-                      // Table Header - Dark purple
-                      TableRow(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF4A148C).withOpacity(0.8),
+                child: FutureBuilder<Map<String, dynamic>?>(
+                  future: _attendanceData,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    if (snapshot.hasError || !snapshot.hasData || snapshot.data == null) {
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(15),
+                        child: Table(
+                          border: TableBorder.all(
+                            color: Colors.grey.shade300,
+                            width: 1,
+                          ),
+                          columnWidths: const {
+                            0: FlexColumnWidth(1),
+                            1: FlexColumnWidth(1.5),
+                          },
+                          children: [
+                            TableRow(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF4A148C).withOpacity(0.8),
+                              ),
+                              children: [
+                                _buildTableCell('Error', true, true),
+                                _buildTableCell('Could not load data', true, false),
+                              ],
+                            ),
+                          ],
                         ),
+                      );
+                    }
+
+                    final attendanceData = snapshot.data!;
+                    final attendanceLevel = attendanceData['Attendance Level'] as int? ?? 0;
+                    final lastAttended = attendanceData['Last Attended'] as Timestamp?;
+
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(15),
+                      child: Table(
+                        border: TableBorder.all(
+                          color: Colors.grey.shade300,
+                          width: 1,
+                        ),
+                        columnWidths: const {
+                          0: FlexColumnWidth(1),
+                          1: FlexColumnWidth(1.5),
+                        },
                         children: [
-                          _buildTableCell('Category', true, true),
-                          _buildTableCell('Details', true, false),
-                        ],
-                      ),
-                      // Subject Row - Left cell light purple
-                      TableRow(
-                        children: [
-                          Container(
-                            color: const Color(0xFF6A1B9A).withOpacity(0.1),
-                            child: _buildTableCell('Subject', false, true),
+                          // Table Header - Dark purple
+                          TableRow(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF4A148C).withOpacity(0.8),
+                            ),
+                            children: [
+                              _buildTableCell('Category', true, true),
+                              _buildTableCell('Details', true, false),
+                            ],
                           ),
-                          _buildTableCell(course, false, false),
-                        ],
-                      ),
-                      // Attendance Level Row - Left cell light purple
-                      TableRow(
-                        children: [
-                          Container(
-                            color: const Color(0xFF6A1B9A).withOpacity(0.1),
-                            child: _buildTableCell('Attendance Level', false, true),
+                          // Subject Row - Left cell light purple
+                          TableRow(
+                            children: [
+                              Container(
+                                color: const Color(0xFF6A1B9A).withOpacity(0.1),
+                                child: _buildTableCell('Subject', false, true),
+                              ),
+                              _buildTableCell(widget.course, false, false),
+                            ],
                           ),
-                          _buildTableCell('85% (17/20 classes)', false, false),
-                        ],
-                      ),
-                      // Last Attended Row - Left cell light purple
-                      TableRow(
-                        children: [
-                          Container(
-                            color: const Color(0xFF6A1B9A).withOpacity(0.1),
-                            child: _buildTableCell('Last Attended', false, true),
+                          // Attendance Level Row - Left cell light purple
+                          TableRow(
+                            children: [
+                              Container(
+                                color: const Color(0xFF6A1B9A).withOpacity(0.1),
+                                child: _buildTableCell('Attendance Level', false, true),
+                              ),
+                              _buildTableCell(
+                                _calculatePercentage(attendanceLevel, 20), // Assuming 20 is total classes
+                                false, 
+                                false
+                              ),
+                            ],
                           ),
-                          _buildTableCell('2023-11-15', false, false),
+                          // Last Attended Row - Left cell light purple
+                          TableRow(
+                            children: [
+                              Container(
+                                color: const Color(0xFF6A1B9A).withOpacity(0.1),
+                                child: _buildTableCell('Last Attended', false, true),
+                              ),
+                              _buildTableCell(
+                                _formatLastAttended(lastAttended),
+                                false, 
+                                false
+                              ),
+                            ],
+                          ),
                         ],
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
               ),
 
@@ -153,7 +243,7 @@ class AttendanceRecordPage extends StatelessWidget {
                 child: Opacity(
                   opacity: 0.7,
                   child: Text(
-                    'Detailed attendance records for $course',
+                    'Detailed attendance records for ${widget.course}',
                     style: GoogleFonts.poppins(
                       fontSize: 16,
                       fontStyle: FontStyle.italic,

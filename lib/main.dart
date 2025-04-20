@@ -22,7 +22,7 @@ void main() async {
     print('Firebase initialization error: $e');
     // You might want to show an error screen here
   }
-
+  FirebaseFirestore.instance.settings = const Settings(persistenceEnabled: true);
   runApp(MyApp());
 }
 
