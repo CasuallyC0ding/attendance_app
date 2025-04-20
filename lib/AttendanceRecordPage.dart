@@ -22,22 +22,46 @@ class _AttendanceRecordPageState extends State<AttendanceRecordPage> {
     _attendanceData = _fetchAttendanceData();
   }
 
-  Future<Map<String, dynamic>?> _fetchAttendanceData() async {
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection('Attendance Record')
-          .doc(documentId)
-          .get();
+Future<Map<String, dynamic>?> _fetchAttendanceData() async {
+  try {
+    final doc = await FirebaseFirestore.instance
+        .collection('Attendance Record')
+        .doc(documentId)
+        .get();
 
-      if (doc.exists) {
-        return doc.data()?[widget.course] as Map<String, dynamic>?;
-      }
-      return null;
-    } catch (e) {
-      print('Error fetching attendance data: $e');
+    if (!doc.exists) {
+      print('Document does not exist');
       return null;
     }
+
+    final data = doc.data();
+    if (data == null) {
+      print('Document data is null');
+      return null;
+    }
+
+    // Try different field name variations
+    final courseData = data[widget.course] ?? 
+                     data[widget.course.toUpperCase()] ?? 
+                     data[widget.course.toLowerCase()];
+
+    if (courseData == null) {
+      print('Course ${widget.course} not found in document. Available keys: ${data.keys}');
+      return null;
+    }
+
+    // Ensure we have the required fields
+    final result = {
+      'Attendance Level': courseData['Attendance Level'] ?? courseData['attendance_level'] ?? 0,
+      'Last Attended': courseData['Last Attended'] ?? courseData['last_attended'],
+    };
+
+    return result;
+  } catch (e) {
+    print('Error fetching data: $e');
+    return null;
   }
+}
 
   String _formatLastAttended(Timestamp? timestamp) {
     if (timestamp == null) return 'Never attended';
