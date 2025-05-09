@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -30,12 +31,45 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
 
     setState(() => _isLoading = true);
 
+    // 1. Create the Firebase Auth user
     try {
+      final UserCredential userCred = 
       await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
+      final uid = userCred.user!.uid; // <-- This will be your document ID
+
+      // 2. Initialize the Firestore document under "Attendance Record" → uid
+      final attendanceRef = FirebaseFirestore.instance
+      .collection('Attendance Record')
+      .doc(uid);
+
+      await attendanceRef.set({
+      'COMM604': {
+        'Attendance Level': 0,
+        'Last Attended': FieldValue.serverTimestamp(),
+      },
+      'MNGT601': {
+        'Attendance Level': 0,
+        'Last Attended': FieldValue.serverTimestamp(),
+      },
+      'NETW603': {
+        'Attendance Level': 0,
+        'Last Attended': FieldValue.serverTimestamp(),
+      },
+      'NETW703': {
+        'Attendance Level': 0,
+        'Last Attended': FieldValue.serverTimestamp(),
+      },
+      'NETW707': {
+        'Attendance Level': 0,
+        'Last Attended': FieldValue.serverTimestamp(),
+      },
+      // more courses can be added here if needed
+    });
+      
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
