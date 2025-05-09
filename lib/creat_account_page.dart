@@ -48,22 +48,29 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
 
       await attendanceRef.set({
       'COMM604': {
+        'MAC Address': 'BC:57:29:05:5D:5D',
         'Attendance Level': 0,
         'Last Attended': FieldValue.serverTimestamp(),
       },
       'MNGT601': {
+        'MAC Address': 'BC:57:29:05:72:73',
         'Attendance Level': 0,
         'Last Attended': FieldValue.serverTimestamp(),
       },
       'NETW603': {
+        'MAC Address': 'BC:57:29:02:99:87',
         'Attendance Level': 0,
         'Last Attended': FieldValue.serverTimestamp(),
       },
       'NETW703': {
+        // These will be left as zeros till we know if there will be more beacons or not
+        'MAC Address': '0',
         'Attendance Level': 0,
         'Last Attended': FieldValue.serverTimestamp(),
       },
       'NETW707': {
+        // These will be left as zeros till we know if there will be more beacons or not
+        'MAC Address': '1',
         'Attendance Level': 0,
         'Last Attended': FieldValue.serverTimestamp(),
       },
