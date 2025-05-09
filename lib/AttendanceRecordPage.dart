@@ -1,8 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'AttendanceTrackerPage.dart';
-import 'userDocService.dart';
 
 class AttendanceRecordPage extends StatefulWidget {
   final String course;
@@ -13,21 +13,23 @@ class AttendanceRecordPage extends StatefulWidget {
   _AttendanceRecordPageState createState() => _AttendanceRecordPageState();
 }
 
-class _AttendanceRecordPageState extends State<AttendanceRecordPage> {
+class _AttendanceRecordPageState extends State<AttendanceRecordPage>{
   late Future<Map<String, dynamic>?> _attendanceData;
-  final String documentId = 'RePgzpGQJfSSVh5QJEMK'; // Your document ID
 
-  @override
+@override
   void initState() {
     super.initState();
+    // <-- here
     _attendanceData = _fetchAttendanceData();
   }
-
+  
 Future<Map<String, dynamic>?> _fetchAttendanceData() async {
+  final currentUser = FirebaseAuth.instance.currentUser;
+
   try {
     final doc = await FirebaseFirestore.instance
         .collection('Attendance Record')
-        .doc(documentId)
+        .doc(currentUser?.uid)
         .get();
 
     if (!doc.exists) {
