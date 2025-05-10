@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:attendance_app/take_attendance_page.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -14,7 +16,9 @@ class AttendancePage extends StatefulWidget {
 }
 
 class _AttendancePageState extends State<AttendancePage> {
-  final String targetMac = 'BC:57:29:00:4B:3A';
+  // holds MAC → courseCode
+  StreamSubscription<List<ScanResult>>? _scanSubscription;
+  Map<String, String> _macToCourse = {};
   bool isScanning = false;
   List<ScanResult> devices = [];
 
@@ -22,6 +26,31 @@ class _AttendancePageState extends State<AttendancePage> {
   void initState() {
     super.initState();
     _checkPermissions();
+    _loadMacCourseMap();
+  }
+
+  Future<void> _loadMacCourseMap() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final doc =
+        await FirebaseFirestore.instance
+            .collection('Attendance Record')
+            .doc(user.uid)
+            .get();
+    if (!doc.exists) return;
+
+    final data = doc.data()!;
+    final map = <String, String>{};
+    data.forEach((courseCode, courseDataRaw) {
+      final courseData = Map<String, dynamic>.from(courseDataRaw);
+      final mac = (courseData['MAC Address'] ?? '').toString().toUpperCase();
+      if (mac.isNotEmpty && mac != '0' && mac != '1') {
+        map[mac] = courseCode;
+      }
+    });
+
+    setState(() => _macToCourse = map);
+    print('Loaded MAC→Course map: $_macToCourse');
   }
 
   Future<void> _checkPermissions() async {
@@ -31,21 +60,46 @@ class _AttendancePageState extends State<AttendancePage> {
     await Permission.locationWhenInUse.request();
   }
 
+  Future<void> _updateAttendanceFor(String courseCode) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final docRef = FirebaseFirestore.instance
+        .collection('Attendance Record')
+        .doc(user.uid);
+
+    await docRef.update({
+      // FieldValue.increment(1) adds 1 to whatever the current counter is
+      '$courseCode.Attendance Level': FieldValue.increment(1),
+      '$courseCode.Last Attended': FieldValue.serverTimestamp(),
+    });
+  }
+
   Future<void> _startScan() async {
+    // Clear out any old state
     devices.clear();
     setState(() => isScanning = true);
 
-    FlutterBluePlus.startScan(timeout: const Duration(seconds: 1000));
+    // Make sure any previous scan is stopped
+    await FlutterBluePlus.stopScan();
 
-    FlutterBluePlus.scanResults.listen((results) async {
-      for (ScanResult result in results) {
+    // Kick off the scan with a timeout
+    FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
+
+    // Listen exactly once
+    _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
+      for (final result in results) {
         final mac = result.device.remoteId.str.toUpperCase();
-        if (mac == targetMac.toUpperCase()) {
+        if (_macToCourse.containsKey(mac)) {
+          final course = _macToCourse[mac]!;
+
+          // Stop scanning and clean up
           FlutterBluePlus.stopScan();
+          _scanSubscription?.cancel();
           setState(() => isScanning = false);
 
+          // Navigate & update
           final distance = _calculateDistance(result.rssi);
-
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
@@ -56,14 +110,23 @@ class _AttendancePageState extends State<AttendancePage> {
               ),
             ),
           );
+          _updateAttendanceFor(course);
           return;
         }
 
+        // Otherwise show device in the list
         if (!devices.any((d) => d.device.remoteId == result.device.remoteId)) {
           setState(() => devices.add(result));
         }
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _scanSubscription?.cancel();
+    FlutterBluePlus.stopScan();
+    super.dispose();
   }
 
   double _calculateDistance(int rssi) {
@@ -86,7 +149,11 @@ class _AttendancePageState extends State<AttendancePage> {
             padding: const EdgeInsets.all(8.0),
             child: Row(
               children: [
-                const Icon(Icons.event_available, color: Colors.white, size: 24),
+                const Icon(
+                  Icons.event_available,
+                  color: Colors.white,
+                  size: 24,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'The Attender',
@@ -159,7 +226,9 @@ class _AttendancePageState extends State<AttendancePage> {
                         ),
                         trailing: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.deepPurple.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(10),
