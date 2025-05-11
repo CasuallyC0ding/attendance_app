@@ -150,12 +150,11 @@ class HomePage extends StatelessWidget {
       ),
     );
   }
-}*/import 'package:attendance_app/take_attendance_page.dart';
+}*/
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'LogInPage.dart';
 import 'creat_account_page.dart';
-import 'package:intl/intl.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
