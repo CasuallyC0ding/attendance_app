@@ -51,28 +51,33 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
         'MAC Address': 'BC:57:29:05:5D:5D',
         'Attendance Level': 0,
         'Last Attended': FieldValue.serverTimestamp(),
+        'Attendance History': <Timestamp>[],       // ← empty history
       },
       'MNGT601': {
         'MAC Address': 'BC:57:29:05:72:73',
         'Attendance Level': 0,
         'Last Attended': FieldValue.serverTimestamp(),
+        'Attendance History': <Timestamp>[],       // ← empty history
       },
       'NETW603': {
         'MAC Address': 'BC:57:29:02:99:87',
         'Attendance Level': 0,
         'Last Attended': FieldValue.serverTimestamp(),
+        'Attendance History': <Timestamp>[],       // ← empty history
       },
       'NETW703': {
         // These will be left as zeros till we know if there will be more beacons or not
         'MAC Address': '0',
         'Attendance Level': 0,
         'Last Attended': FieldValue.serverTimestamp(),
+        'Attendance History': <Timestamp>[],       // ← empty history
       },
       'NETW707': {
         // These will be left as zeros till we know if there will be more beacons or not
         'MAC Address': '1',
         'Attendance Level': 0,
         'Last Attended': FieldValue.serverTimestamp(),
+        'Attendance History': <Timestamp>[],       // ← empty history
       },
       // more courses can be added here if needed
     });

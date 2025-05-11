@@ -73,53 +73,109 @@ class _AttendancePageState extends State<AttendancePage> {
       '$courseCode.Attendance Level': FieldValue.increment(1),
       '$courseCode.Last Attended': FieldValue.serverTimestamp(),
     });
+
+    await docRef.collection('History').add({
+            'timestamp': FieldValue.serverTimestamp(),
+
+    });
   }
 
   Future<void> _startScan() async {
-    // Clear out any old state
+    // Clear old scan state
     devices.clear();
     setState(() => isScanning = true);
 
-    // Make sure any previous scan is stopped
+    // Ensure no scan is already running
     await FlutterBluePlus.stopScan();
 
-    // Kick off the scan with a timeout
+    // Start a new scan with a 10s timeout
     FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
 
-    // Listen exactly once
+    // Listen for results
     _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
       for (final result in results) {
         final mac = result.device.remoteId.str.toUpperCase();
+
         if (_macToCourse.containsKey(mac)) {
+          // Found one of our course beacons
           final course = _macToCourse[mac]!;
 
-          // Stop scanning and clean up
+          // Stop scanning
           FlutterBluePlus.stopScan();
           _scanSubscription?.cancel();
           setState(() => isScanning = false);
 
-          // Navigate & update
-          final distance = _calculateDistance(result.rssi);
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => AttendanceSuccessPage(
-                mac: mac,
-                distance: distance,
-                timestamp: DateTime.now(),
-              ),
-            ),
-          );
-          _updateAttendanceFor(course);
+          // Hand off to connection + validation logic
+          _onBeaconFound(result, course);
           return;
         }
 
-        // Otherwise show device in the list
+        // Otherwise, show it in the list
         if (!devices.any((d) => d.device.remoteId == result.device.remoteId)) {
           setState(() => devices.add(result));
         }
       }
     });
+  }
+  Future<void> _onBeaconFound(ScanResult result, String courseCode) async {
+    final device = result.device;
+    const insideRssiThreshold = -70; // adjust to your environment
+
+    try {
+      // 1) Connect (with a 10s timeout)
+      await device.connect(timeout: const Duration(seconds: 10));
+
+      // 2) Start polling RSSI every 5 seconds
+      int lastRssi = result.rssi;
+      Timer? rssiPoller = Timer.periodic(const Duration(seconds: 5), (_) async {
+        try {
+          lastRssi = await device.readRssi();
+        } catch (_) {}
+      });
+
+      // 3) Wait a full 60s of “connection time”
+      await Future.delayed(const Duration(minutes: 1));
+
+      // 4) Check if we’re “inside” by RSSI
+      if (lastRssi >= insideRssiThreshold) {
+        // Update attendance + history
+        await _updateAttendanceFor(courseCode);
+
+        // Navigate to success
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AttendanceSuccessPage(
+              mac: result.device.remoteId.str,
+              distance: _calculateDistance(lastRssi),
+              timestamp: DateTime.now(),
+            ),
+          ),
+        );
+      } else {
+        // Too weak a signal—treat as “outside”
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please move closer (inside) to check in.')),
+        );
+        // Optionally restart scanning:
+        // _startScan();
+      }
+
+      // 5) Cleanup the RSSI timer
+      rssiPoller.cancel();
+    } catch (e) {
+      // Connection or timeout failed
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Connection failed: $e')),
+      );
+      // Optionally restart scanning:
+      // _startScan();
+    } finally {
+      // Always disconnect when done
+      try {
+        await device.disconnect();
+      } catch (_) {}
+    }
   }
 
   @override
