@@ -123,24 +123,26 @@ class _AttendanceRecordPageState extends State<AttendanceRecordPage> {
             final perc = _percentage(level, totalClasses);
 
             // pick a GIF & message based on perc
-            String gifUrl;
+            String gifPath;
             String message;
+
             if (perc >= 100) {
-              gifUrl = 'https://i.gifer.com/ZMQt.gif';
+              gifPath = 'assets/gifs/goku_5.gif';
               message = "Perfect! You're Super Saiyan strong!";
             } else if (perc >= 80) {
-              gifUrl = 'https://i.gifer.com/5Q15.gif';
+              gifPath = 'assets/gifs/goku_4.gif';
               message = "Awesome! Keep powering up!";
             } else if (perc >= 60) {
-              gifUrl = 'https://i.gifer.com/ZLBh.gif';
+              gifPath = 'assets/gifs/goku_3.gif';
               message = "Great job! Almost there!";
             } else if (perc >= 40) {
-              gifUrl = 'https://i.gifer.com/ZLnj.gif';
+              gifPath = 'assets/gifs/goku_2.gif';
               message = "Nice start! Train harder!";
             } else {
-              gifUrl = 'https://i.gifer.com/Vp3S.gif';
+              gifPath = 'assets/gifs/goku_1.gif';
               message = "Let’s power up! You can do it!";
             }
+
 
             return SingleChildScrollView(
               child: Column(
@@ -210,16 +212,13 @@ class _AttendanceRecordPageState extends State<AttendanceRecordPage> {
                       borderRadius: BorderRadius.circular(15),
                     ),
                     child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Image.network(gifUrl, height: 150),
-                        const SizedBox(height: 12),
+                        Image.asset(gifPath),
+                        SizedBox(height: 16),
                         Text(
                           message,
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: const Color(0xFF4A148C),
-                          ),
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                           textAlign: TextAlign.center,
                         ),
                       ],
