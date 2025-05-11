@@ -12,88 +12,103 @@ class AttendanceHistoryPage extends StatefulWidget {
 }
 
 class _AttendanceHistoryPageState extends State<AttendanceHistoryPage> {
-  late Stream<QuerySnapshot> _historyStream;
+  late Future<List<Timestamp>> _historyFuture;
 
   @override
   void initState() {
     super.initState();
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-    // assumes you stored history under subcollection: Courses/{course}/History
-    _historyStream = FirebaseFirestore.instance
-      .collection('Attendance Record')
-      .doc(uid)
-      .collection('Courses')
-      .doc(widget.course)
-      .collection('History')
-      .orderBy('timestamp', descending: true)
-      .snapshots();
+    _historyFuture = _fetchHistory();
   }
 
-  String _formatTimestamp(Timestamp ts) {
-    final dt = ts.toDate();
-    return '${dt.year}-${dt.month.toString().padLeft(2,'0')}-${dt.day.toString().padLeft(2,'0')} '
-           '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
+  Future<List<Timestamp>> _fetchHistory() async {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final snap = await FirebaseFirestore.instance
+        .collection('Attendance Record')
+        .doc(uid)
+        .get();
+
+    if (!snap.exists) return [];
+
+    final data = snap.data()!;
+    final courseMap = data[widget.course] as Map<String, dynamic>? ?? {};
+    final raw = courseMap['Attendance History'] as List<dynamic>? ?? [];
+    return raw
+        .where((e) => e is Timestamp)
+        .map((e) => e as Timestamp)
+        .toList()
+      ..sort((a, b) => b.compareTo(a)); // newest first
+  }
+
+  String _format(Timestamp ts) {
+    final d = ts.toDate();
+    return '${d.year}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')} '
+           '${d.hour.toString().padLeft(2,'0')}:${d.minute.toString().padLeft(2,'0')}';
   }
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width * 0.9;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF4A148C),
-        leading: BackButton(color: Colors.white),
-        title: Text(
-          '${widget.course} History',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-        ),
+        leading: const BackButton(color: Colors.white),
+        title: Text('${widget.course} History', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
       ),
       body: Container(
         width: double.infinity,
         height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
+            colors: [Color(0xFF4A148C), Color(0xFF6A1B9A)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF4A148C), Color(0xFF6A1B9A)],
           ),
         ),
-        child: StreamBuilder<QuerySnapshot>(
-          stream: _historyStream,
+        child: FutureBuilder<List<Timestamp>>(
+          future: _historyFuture,
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
-            final docs = snap.data?.docs ?? [];
-            if (docs.isEmpty) {
+            final list = snap.data ?? [];
+            if (list.isEmpty) {
               return Center(
                 child: Text(
                   'No attendance records yet.',
-                  style: GoogleFonts.poppins(color: Colors.white70),
+                  style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
                 ),
               );
             }
 
-            // Build a simple table: Date | Time
-            return SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                elevation: 8,
-                child: DataTable(
-                  columns: [
-                    DataColumn(label: Text('Date', style: GoogleFonts.poppins(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('Time', style: GoogleFonts.poppins(fontWeight: FontWeight.bold))),
-                  ],
-                  rows: docs.map((d) {
-                    final ts = d['timestamp'] as Timestamp;
-                    final formatted = _formatTimestamp(ts);
-                    final parts = formatted.split(' ');
-                    return DataRow(cells: [
-                      DataCell(Text(parts[0], style: GoogleFonts.poppins())),
-                      DataCell(Text(parts[1], style: GoogleFonts.poppins())),
-                    ]);
-                  }).toList(),
+            final rows = list.map((ts) {
+              final parts = _format(ts).split(' ');
+              return DataRow(cells: [
+                DataCell(Text(parts[0], style: GoogleFonts.poppins())),
+                DataCell(Text(parts[1], style: GoogleFonts.poppins())),
+              ]);
+            }).toList();
+
+            return Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Card(
+                  margin: EdgeInsets.zero,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  elevation: 8,
+                  child: Container(
+                    width: screenWidth,
+                    padding: const EdgeInsets.all(16),
+                    child: DataTable(
+                      headingRowColor: MaterialStateProperty.all(const Color(0xFF4A148C).withOpacity(0.9)),
+                      headingTextStyle: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold),
+                      dataTextStyle: GoogleFonts.poppins(color: Colors.black87),
+                      columns: const [
+                        DataColumn(label: Text('Date')),
+                        DataColumn(label: Text('Time')),
+                      ],
+                      rows: rows,
+                    ),
+                  ),
                 ),
               ),
             );

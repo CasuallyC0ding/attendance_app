@@ -1,3 +1,4 @@
+import 'package:attendance_app/AttendanceHistoryPage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -264,6 +265,26 @@ Future<Map<String, dynamic>?> _fetchAttendanceData() async {
                 ),
               ),
 
+              // View History button
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AttendanceHistoryPage(course: widget.course),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.history, color: Colors.white),
+                label: Text('View Attendance History', style: GoogleFonts.poppins(color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00BFA5),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+
+              const SizedBox(height: 30),
               // Text at bottom outside the white box
               Padding(
                 padding: const EdgeInsets.only(bottom: 30),
