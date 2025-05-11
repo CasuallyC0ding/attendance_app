@@ -14,108 +14,82 @@ class AttendanceRecordPage extends StatefulWidget {
   _AttendanceRecordPageState createState() => _AttendanceRecordPageState();
 }
 
-class _AttendanceRecordPageState extends State<AttendanceRecordPage>{
+class _AttendanceRecordPageState extends State<AttendanceRecordPage> {
   late Future<Map<String, dynamic>?> _attendanceData;
 
-@override
+  @override
   void initState() {
     super.initState();
-    // <-- here
     _attendanceData = _fetchAttendanceData();
   }
-  
-Future<Map<String, dynamic>?> _fetchAttendanceData() async {
-  final currentUser = FirebaseAuth.instance.currentUser;
 
-  try {
-    final doc = await FirebaseFirestore.instance
-        .collection('Attendance Record')
-        .doc(currentUser?.uid)
-        .get();
+  Future<Map<String, dynamic>?> _fetchAttendanceData() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return null;
 
-    if (!doc.exists) {
-      print('Document does not exist');
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('Attendance Record')
+          .doc(currentUser.uid)
+          .get();
+
+      if (!doc.exists) return null;
+      final data = doc.data()!;
+      final courseData = data[widget.course]
+          ?? data[widget.course.toUpperCase()]
+          ?? data[widget.course.toLowerCase()];
+      if (courseData == null) return null;
+
+      return {
+        'Attendance Level': courseData['Attendance Level'] ?? 0,
+        'Last Attended': courseData['Last Attended'],
+      };
+    } catch (_) {
       return null;
     }
-
-    final data = doc.data();
-    if (data == null) {
-      print('Document data is null');
-      return null;
-    }
-
-    // Try different field name variations
-    final courseData = data[widget.course] ?? 
-                     data[widget.course.toUpperCase()] ?? 
-                     data[widget.course.toLowerCase()];
-
-    if (courseData == null) {
-      print('Course ${widget.course} not found in document. Available keys: ${data.keys}');
-      return null;
-    }
-
-    // Ensure we have the required fields
-    final result = {
-      'Attendance Level': courseData['Attendance Level'] ?? courseData['attendance_level'] ?? 0,
-      'Last Attended': courseData['Last Attended'] ?? courseData['last_attended'],
-    };
-
-    return result;
-  } catch (e) {
-    print('Error fetching data: $e');
-    return null;
   }
-}
 
   String _formatLastAttended(Timestamp? timestamp) {
     if (timestamp == null) return 'Never attended';
-    final date = timestamp.toDate();
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    final d = timestamp.toDate();
+    return '${d.year}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}';
   }
 
-  String _calculatePercentage(int? attended, int? total) {
-    if (attended == null || total == null || total == 0) return '0% (0/0 classes)';
-    final percentage = (attended / total * 100).round();
-    return '$percentage% ($attended/$total classes)';
+  double _percentage(int attended, int total) {
+    return total > 0 ? attended / total * 100 : 0;
   }
 
   @override
   Widget build(BuildContext context) {
+    const totalClasses = 20; // adjust as needed
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF4A148C),
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.home, color: Colors.white),
-          onPressed: () {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const AttendanceTrackerPage()),
-            );
-          },
+          onPressed: () => Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const AttendanceTrackerPage()),
+          ),
         ),
         actions: [
           Padding(
             padding: const EdgeInsets.all(8.0),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.event_available,
+            child: Row(children: [
+              const Icon(Icons.event_available, color: Colors.white, size: 30),
+              const SizedBox(width: 10),
+              Text(
+                'The Attender',
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
                   color: Colors.white,
-                  size: 30,
                 ),
-                const SizedBox(width: 10),
-                Text(
-                  'The Attender',
-                  style: GoogleFonts.poppins(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
+              )
+            ]),
+          )
         ],
       ),
       body: Container(
@@ -128,200 +102,179 @@ Future<Map<String, dynamic>?> _fetchAttendanceData() async {
             colors: [Color(0xFF4A148C), Color(0xFF6A1B9A)],
           ),
         ),
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              // Title outside the white box
-              Padding(
-                padding: const EdgeInsets.only(top: 30, bottom: 20),
+        child: FutureBuilder<Map<String, dynamic>?>(
+          future: _attendanceData,
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final data = snap.data;
+            if (data == null) {
+              return Center(
                 child: Text(
-                  'Attendance Record',
-                  style: GoogleFonts.poppins(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+                  'Could not load attendance.',
+                  style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
                 ),
-              ),
+              );
+            }
 
-              // White box containing the table
-              Container(
-                width: MediaQuery.of(context).size.width * 0.9,
-                padding: const EdgeInsets.all(0),
-                margin: const EdgeInsets.only(bottom: 30),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(15),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 10,
-                      spreadRadius: 5,
-                    ),
-                  ],
-                ),
-                child: FutureBuilder<Map<String, dynamic>?>(
-                  future: _attendanceData,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
+            final level = data['Attendance Level'] as int;
+            final last = data['Last Attended'] as Timestamp?;
+            final perc = _percentage(level, totalClasses);
 
-                    if (snapshot.hasError || !snapshot.hasData || snapshot.data == null) {
-                      return ClipRRect(
-                        borderRadius: BorderRadius.circular(15),
-                        child: Table(
-                          border: TableBorder.all(
-                            color: Colors.grey.shade300,
-                            width: 1,
-                          ),
-                          columnWidths: const {
-                            0: FlexColumnWidth(1),
-                            1: FlexColumnWidth(1.5),
-                          },
-                          children: [
-                            TableRow(
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF4A148C).withOpacity(0.8),
-                              ),
-                              children: [
-                                _buildTableCell('Error', true, true),
-                                _buildTableCell('Could not load data', true, false),
-                              ],
-                            ),
-                          ],
-                        ),
-                      );
-                    }
+            // pick a GIF & message based on perc
+            String gifUrl;
+            String message;
+            if (perc >= 100) {
+              gifUrl = 'https://i.gifer.com/ZMQt.gif';
+              message = "Perfect! You're Super Saiyan strong!";
+            } else if (perc >= 80) {
+              gifUrl = 'https://i.gifer.com/5Q15.gif';
+              message = "Awesome! Keep powering up!";
+            } else if (perc >= 60) {
+              gifUrl = 'https://i.gifer.com/ZLBh.gif';
+              message = "Great job! Almost there!";
+            } else if (perc >= 40) {
+              gifUrl = 'https://i.gifer.com/ZLnj.gif';
+              message = "Nice start! Train harder!";
+            } else {
+              gifUrl = 'https://i.gifer.com/Vp3S.gif';
+              message = "Let’s power up! You can do it!";
+            }
 
-                    final attendanceData = snapshot.data!;
-                    final attendanceLevel = attendanceData['Attendance Level'] as int? ?? 0;
-                    final lastAttended = attendanceData['Last Attended'] as Timestamp?;
-
-                    return ClipRRect(
-                      borderRadius: BorderRadius.circular(15),
-                      child: Table(
-                        border: TableBorder.all(
-                          color: Colors.grey.shade300,
-                          width: 1,
-                        ),
-                        columnWidths: const {
-                          0: FlexColumnWidth(1),
-                          1: FlexColumnWidth(1.5),
-                        },
-                        children: [
-                          // Table Header - Dark purple
-                          TableRow(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF4A148C).withOpacity(0.8),
-                            ),
-                            children: [
-                              _buildTableCell('Category', true, true),
-                              _buildTableCell('Details', true, false),
-                            ],
-                          ),
-                          // Subject Row - Left cell light purple
-                          TableRow(
-                            children: [
-                              Container(
-                                color: const Color(0xFF6A1B9A).withOpacity(0.1),
-                                child: _buildTableCell('Subject', false, true),
-                              ),
-                              _buildTableCell(widget.course, false, false),
-                            ],
-                          ),
-                          // Attendance Level Row - Left cell light purple
-                          TableRow(
-                            children: [
-                              Container(
-                                color: const Color(0xFF6A1B9A).withOpacity(0.1),
-                                child: _buildTableCell('Attendance Level', false, true),
-                              ),
-                              _buildTableCell(
-                                _calculatePercentage(attendanceLevel, 20), // Assuming 20 is total classes
-                                false, 
-                                false
-                              ),
-                            ],
-                          ),
-                          // Last Attended Row - Left cell light purple
-                          TableRow(
-                            children: [
-                              Container(
-                                color: const Color(0xFF6A1B9A).withOpacity(0.1),
-                                child: _buildTableCell('Last Attended', false, true),
-                              ),
-                              _buildTableCell(
-                                _formatLastAttended(lastAttended),
-                                false, 
-                                false
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-
-              // View History button
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => AttendanceHistoryPage(course: widget.course),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.history, color: Colors.white),
-                label: Text('View Attendance History', style: GoogleFonts.poppins(color: Colors.white)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00BFA5),
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-
-              const SizedBox(height: 30),
-              // Text at bottom outside the white box
-              Padding(
-                padding: const EdgeInsets.only(bottom: 30),
-                child: Opacity(
-                  opacity: 0.7,
-                  child: Text(
-                    'Detailed attendance records for ${widget.course}',
+            return SingleChildScrollView(
+              child: Column(
+                children: [
+                  const SizedBox(height: 30),
+                  Text(
+                    'Attendance Record',
                     style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontStyle: FontStyle.italic,
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
-                    textAlign: TextAlign.center,
                   ),
-                ),
+                  const SizedBox(height: 20),
+
+                  // Summary table
+                  Container(
+                    width: MediaQuery.of(context).size.width * 0.9,
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(15),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, spreadRadius: 5)
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(15),
+                      child: Table(
+                        border: TableBorder.all(color: Colors.grey.shade300, width: 1),
+                        columnWidths: const {0: FlexColumnWidth(1), 1: FlexColumnWidth(1.5)},
+                        children: [
+                          _buildRow('Category', 'Details', isHeader: true),
+                          _buildRow('Subject', widget.course),
+                          _buildRow('Attendance Level', '${level}/${totalClasses}'),
+                          _buildRow('Last Attended', _formatLastAttended(last)),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // View history button
+                  ElevatedButton.icon(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AttendanceHistoryPage(course: widget.course),
+                      ),
+                    ),
+                    icon: const Icon(Icons.history, color: Colors.white),
+                    label: Text('View Attendance History', style: GoogleFonts.poppins(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00BFA5),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Goku GIF + message
+                  Container(
+                    width: MediaQuery.of(context).size.width * 0.8,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: Column(
+                      children: [
+                        Image.network(gifUrl, height: 150),
+                        const SizedBox(height: 12),
+                        Text(
+                          message,
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF4A148C),
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 30),
+                  Opacity(
+                    opacity: 0.7,
+                    child: Text(
+                      'Detailed attendance records for ${widget.course}',
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontStyle: FontStyle.italic,
+                        color: Colors.white,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildTableCell(String text, bool isHeader, bool isLeftCell) {
+  TableRow _buildRow(String a, String b, {bool isHeader = false}) {
+    final bg = isHeader ? const Color(0xFF4A148C).withOpacity(0.8) : Colors.transparent;
+    return TableRow(
+      decoration: BoxDecoration(color: bg),
+      children: [
+        _cell(a, isHeader, isLeft: true),
+        _cell(b, isHeader, isLeft: false),
+      ],
+    );
+  }
+
+  Widget _cell(String txt, bool header, {required bool isLeft}) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-      alignment: Alignment.center,
+      color: !header && isLeft ? const Color(0xFF6A1B9A).withOpacity(0.1) : null,
       child: Text(
-        text,
-        style: GoogleFonts.poppins(
-          fontSize: isHeader ? 16 : 14,
-          fontWeight: isHeader ? FontWeight.bold : FontWeight.normal,
-          color: isHeader ? Colors.white :
-          (isLeftCell ? const Color(0xFF4A148C) : const Color(0xFF6A1B9A)),
-          fontStyle: isLeftCell ? FontStyle.italic : FontStyle.normal,
-        ),
+        txt,
         textAlign: TextAlign.center,
+        style: GoogleFonts.poppins(
+          fontSize: header ? 16 : 14,
+          fontWeight: header ? FontWeight.bold : FontWeight.normal,
+          color: header
+              ? Colors.white
+              : (isLeft ? const Color(0xFF4A148C) : const Color(0xFF6A1B9A)),
+          fontStyle: header ? FontStyle.normal : FontStyle.italic,
+        ),
       ),
     );
   }
