@@ -59,10 +59,49 @@ class _AttendanceRecordPageState extends State<AttendanceRecordPage> {
     return total > 0 ? attended / total * 100 : 0;
   }
 
+Future<void> _deleteLastAttendance(int currentLevel) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final recordRef = FirebaseFirestore.instance
+        .collection('Attendance Record')
+        .doc(user.uid);
+    final batch = FirebaseFirestore.instance.batch();
+
+    // 1) Update summary
+    batch.update(recordRef, {
+      '${widget.course}.Attendance Level': currentLevel - 1 > 0 ? currentLevel - 1 : 0,
+      '${widget.course}.Last Attended': null,
+    });
+
+    // 2) Fetch and delete latest history entry without requiring composite index
+    final recentSnap = await recordRef
+        .collection('history')
+        .orderBy('timestamp', descending: true)
+        .limit(20)
+        .get();
+
+    for (var doc in recentSnap.docs) {
+      final data = doc.data();
+      if (data['course'] == widget.course) {
+        batch.delete(doc.reference);
+        break;
+      }
+    }
+
+    // 3) Commit batch
+    await batch.commit();
+
+    // 4) Refresh attendance data
+    final newFuture = _fetchAttendanceData();
+    setState(() {
+      _attendanceData = newFuture;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    const totalClasses = 20; // adjust as needed
-
+    const totalClasses = 20;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF4A148C),
@@ -74,23 +113,7 @@ class _AttendanceRecordPageState extends State<AttendanceRecordPage> {
             MaterialPageRoute(builder: (_) => const AttendanceTrackerPage()),
           ),
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(children: [
-              const Icon(Icons.event_available, color: Colors.white, size: 30),
-              const SizedBox(width: 10),
-              Text(
-                'The Attender',
-                style: GoogleFonts.poppins(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              )
-            ]),
-          )
-        ],
+        title: Text('The Attender', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.white)),
       ),
       body: Container(
         width: double.infinity,
@@ -111,134 +134,89 @@ class _AttendanceRecordPageState extends State<AttendanceRecordPage> {
             final data = snap.data;
             if (data == null) {
               return Center(
-                child: Text(
-                  'Could not load attendance.',
-                  style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
-                ),
+                child: Text('Could not load attendance.', style: GoogleFonts.poppins(color: Colors.white70)),
               );
             }
 
             final level = data['Attendance Level'] as int;
             final last = data['Last Attended'] as Timestamp?;
             final perc = _percentage(level, totalClasses);
+            final canDelete = last != null && DateTime.now().difference(last.toDate()).inMinutes <= 15;
 
-            // pick a GIF & message based on perc
-            String gifPath;
-            String message;
-
+            String gif;
+            String msg;
             if (perc >= 100) {
-              gifPath = 'assets/gifs/goku_5.gif';
-              message = "Perfect! You're Super Saiyan strong!";
+              gif = 'assets/gifs/goku_5.gif';
+              msg = "Perfect! You're Super Saiyan strong!";
             } else if (perc >= 80) {
-              gifPath = 'assets/gifs/goku_4.gif';
-              message = "Awesome! Keep powering up!";
+              gif = 'assets/gifs/goku_4.gif';
+              msg = "Awesome! Keep powering up!";
             } else if (perc >= 60) {
-              gifPath = 'assets/gifs/goku_3.gif';
-              message = "Great job! Almost there!";
+              gif = 'assets/gifs/goku_3.gif';
+              msg = "Great job! Almost there!";
             } else if (perc >= 40) {
-              gifPath = 'assets/gifs/goku_2.gif';
-              message = "Nice start! Train harder!";
+              gif = 'assets/gifs/goku_2.gif';
+              msg = "Nice start! Train harder!";
             } else {
-              gifPath = 'assets/gifs/goku_1.gif';
-              message = "Let’s power up! You can do it!";
+              gif = 'assets/gifs/goku_1.gif';
+              msg = "Let’s power up! You can do it!";
             }
 
-
             return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(vertical: 30),
               child: Column(
                 children: [
-                  const SizedBox(height: 30),
-                  Text(
-                    'Attendance Record',
-                    style: GoogleFonts.poppins(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
+                  Text('Attendance Record', style: GoogleFonts.poppins(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
                   const SizedBox(height: 20),
-
                   // Summary table
                   Container(
-                    width: MediaQuery.of(context).size.width * 0.9,
-                    margin: const EdgeInsets.only(bottom: 20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(15),
-                      boxShadow: [
-                        BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, spreadRadius: 5)
+                    margin: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
+                    child: Table(
+                      border: TableBorder.all(color: Colors.grey.shade300),
+                      columnWidths: const {0: FlexColumnWidth(1), 1: FlexColumnWidth(1.5)},
+                      children: [
+                        _buildRow('Category', 'Details', isHeader: true),
+                        _buildRow('Subject', widget.course),
+                        _buildRow('Attendance Level', '$level/$totalClasses'),
+                        _buildRow('Last Attended', _formatLastAttended(last)),
                       ],
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(15),
-                      child: Table(
-                        border: TableBorder.all(color: Colors.grey.shade300, width: 1),
-                        columnWidths: const {0: FlexColumnWidth(1), 1: FlexColumnWidth(1.5)},
-                        children: [
-                          _buildRow('Category', 'Details', isHeader: true),
-                          _buildRow('Subject', widget.course),
-                          _buildRow('Attendance Level', '${level}/${totalClasses}'),
-                          _buildRow('Last Attended', _formatLastAttended(last)),
-                        ],
-                      ),
-                    ),
                   ),
-
+                  const SizedBox(height: 10),
                   // View history button
                   ElevatedButton.icon(
                     onPressed: () => Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => AttendanceHistoryPage(course: widget.course),
-                      ),
+                      MaterialPageRoute(builder: (_) => AttendanceHistoryPage(course: widget.course)),
                     ),
                     icon: const Icon(Icons.history, color: Colors.white),
-                    label: Text('View Attendance History', style: GoogleFonts.poppins(color: Colors.white)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00BFA5),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
+                    label: Text('View History', style: GoogleFonts.poppins(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00BFA5)),
                   ),
-
-                  const SizedBox(height: 20),
-
-                  // Goku GIF + message
+                  const SizedBox(height: 10),
+                  // Delete button
+                  ElevatedButton.icon(
+                    onPressed: canDelete ? () => _deleteLastAttendance(level) : null,
+                    icon: const Icon(Icons.delete_forever, color: Colors.white),
+                    label: Text('Delete Last Attendance', style: GoogleFonts.poppins(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                  ),
+                  const SizedBox(height: 30),
+                  // GIF & message
                   Container(
                     width: MediaQuery.of(context).size.width * 0.8,
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(15),
-                    ),
+                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(15)),
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Image.asset(gifPath),
-                        SizedBox(height: 16),
-                        Text(
-                          message,
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center,
-                        ),
+                        Image.asset(gif),
+                        const SizedBox(height: 16),
+                        Text(msg, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
                       ],
                     ),
                   ),
-
-                  const SizedBox(height: 30),
-                  Opacity(
-                    opacity: 0.7,
-                    child: Text(
-                      'Detailed attendance records for ${widget.course}',
-                      style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        fontStyle: FontStyle.italic,
-                        color: Colors.white,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                  const SizedBox(height: 30),
                 ],
               ),
             );
@@ -247,7 +225,6 @@ class _AttendanceRecordPageState extends State<AttendanceRecordPage> {
       ),
     );
   }
-
   TableRow _buildRow(String a, String b, {bool isHeader = false}) {
     final bg = isHeader ? const Color(0xFF4A148C).withOpacity(0.8) : Colors.transparent;
     return TableRow(
