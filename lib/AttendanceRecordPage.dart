@@ -15,6 +15,7 @@ class AttendanceRecordPage extends StatefulWidget {
 }
 
 class _AttendanceRecordPageState extends State<AttendanceRecordPage> {
+  bool _hasDeletedOnce = false;
   late Future<Map<String, dynamic>?> _attendanceData;
 
   @override
@@ -60,44 +61,85 @@ class _AttendanceRecordPageState extends State<AttendanceRecordPage> {
   }
 
 Future<void> _deleteLastAttendance(int currentLevel) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
 
-    final recordRef = FirebaseFirestore.instance
-        .collection('Attendance Record')
-        .doc(user.uid);
-    final batch = FirebaseFirestore.instance.batch();
+  final recordRef = FirebaseFirestore.instance
+      .collection('Attendance Record')
+      .doc(user.uid);
 
-    // 1) Update summary
-    batch.update(recordRef, {
-      '${widget.course}.Attendance Level': currentLevel - 1 > 0 ? currentLevel - 1 : 0,
-      '${widget.course}.Last Attended': null,
-    });
+  // 1) Read the whole document once
+  final snap = await recordRef.get();
+  if (!snap.exists) return;
 
-    // 2) Fetch and delete latest history entry without requiring composite index
-    final recentSnap = await recordRef
-        .collection('history')
-        .orderBy('timestamp', descending: true)
-        .limit(20)
-        .get();
+  final data = snap.data()![widget.course] as Map<String, dynamic>? ?? {};
+  // Pull the history array (or empty list if missing)
+  final historyList = List<Timestamp>.from(
+    (data['Attendance History'] as List<dynamic>? ?? [])
+        .whereType<Timestamp>(),
+  );
+  if (historyList.isEmpty) return;  // nothing to delete
 
-    for (var doc in recentSnap.docs) {
-      final data = doc.data();
-      if (data['course'] == widget.course) {
-        batch.delete(doc.reference);
-        break;
-      }
-    }
+  // 2) Identify last and second‑last timestamps
+  final lastTs = historyList.removeLast();
+  final newLastTs = historyList.isNotEmpty ? historyList.last : null;
 
-    // 3) Commit batch
-    await batch.commit();
+  // 3) Batch‑update:
+  final batch = FirebaseFirestore.instance.batch();
+  batch.update(recordRef, {
+    // decrement level, never below 0
+    '${widget.course}.Attendance Level':
+       (currentLevel - 1).clamp(0, double.infinity).toInt(),
+    // set new Last Attended (or null)
+    '${widget.course}.Last Attended': newLastTs,
+    // remove the last timestamp from the array
+    '${widget.course}.Attendance History':
+      FieldValue.arrayRemove([lastTs]),
+  });
 
-    // 4) Refresh attendance data
-    final newFuture = _fetchAttendanceData();
-    setState(() {
-      _attendanceData = newFuture;
-    });
-  }
+  // 4) Commit & refresh UI
+  await batch.commit();
+
+
+  // Defer the dialog until after this frame, and ensure widget is still mounted
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF6A1B9A),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: Text('Deleted', style: GoogleFonts.poppins(color: Colors.white)),
+          content: Text(
+            'Last attendance record removed successfully.',
+            style: GoogleFonts.poppins(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                if (Navigator.of(dialogCtx).canPop()) Navigator.of(dialogCtx).pop();
+              },
+              child: Text('Close', style: GoogleFonts.poppins(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  });
+
+  // Finally update your UI state
+  if (!mounted) return;
+
+  // REFRESH UI
+  setState(() {
+    _hasDeletedOnce = true;
+    _attendanceData = _fetchAttendanceData();
+  });
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -116,6 +158,7 @@ Future<void> _deleteLastAttendance(int currentLevel) async {
         title: Text('The Attender', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.white)),
       ),
       body: Container(
+        
         width: double.infinity,
         height: double.infinity,
         decoration: const BoxDecoration(
@@ -142,6 +185,8 @@ Future<void> _deleteLastAttendance(int currentLevel) async {
             final last = data['Last Attended'] as Timestamp?;
             final perc = _percentage(level, totalClasses);
             final canDelete = last != null && DateTime.now().difference(last.toDate()).inMinutes <= 15;
+            final canDeleteNow = canDelete && !_hasDeletedOnce;
+
 
             String gif;
             String msg;
@@ -198,7 +243,7 @@ Future<void> _deleteLastAttendance(int currentLevel) async {
                   const SizedBox(height: 10),
                   // Delete button
                   ElevatedButton.icon(
-                    onPressed: canDelete ? () => _deleteLastAttendance(level) : null,
+                    onPressed: canDeleteNow ? () => _deleteLastAttendance(level) : null,
                     icon: const Icon(Icons.delete_forever, color: Colors.white),
                     label: Text('Delete Last Attendance', style: GoogleFonts.poppins(color: Colors.white)),
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
@@ -210,10 +255,24 @@ Future<void> _deleteLastAttendance(int currentLevel) async {
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(15)),
                     child: Column(
-                      children: [
+                       children: [
                         Image.asset(gif),
                         const SizedBox(height: 16),
-                        Text(msg, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                        Text(
+                          msg,
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${perc.toStringAsFixed(1)}% attendance',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontStyle: FontStyle.italic,
+                            color: Colors.black54,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
                       ],
                     ),
                   ),
