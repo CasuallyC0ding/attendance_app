@@ -185,7 +185,7 @@ Future<void> _deleteLastAttendance(int currentLevel) async {
             final last = data['Last Attended'] as Timestamp?;
             final perc = _percentage(level, totalClasses);
             final canDelete = last != null && DateTime.now().difference(last.toDate()).inMinutes <= 15;
-            final canDeleteNow = canDelete && !_hasDeletedOnce;
+            final canDeleteNow = canDelete && !_hasDeletedOnce && level > 0;
 
 
             String gif;

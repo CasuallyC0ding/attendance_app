@@ -1,207 +1,198 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'AttendanceTrackerPage.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore package
+//import 'AttendanceTrackerPage.dart';
 
-class AttendanceSuccessPage extends StatelessWidget {
+// Model for beacon/device scan result
+class Beacon {
   final String mac;
   final double distance;
+  final double power;
+
+  Beacon({required this.mac, required this.distance, required this.power});
+}
+
+class AttendanceSuccessPage extends StatelessWidget {
+  final List<Beacon> scannedBeacons;
   final DateTime timestamp;
+
+  // Define thresholds
+  static const double maxAllowedDistance = 5.0; // meters
+  static const double minAllowedPower = -70.0; // dBm
 
   const AttendanceSuccessPage({
     super.key,
-    required this.mac,
-    required this.distance,
+    required this.scannedBeacons,
     required this.timestamp,
   });
+
+  /// Fetch recognized MAC addresses from the 'courses' collection in Firestore
+  Future<Set<String>> _fetchRecognizedMacs() async {
+    final macs = <String>{};
+    final snapshot = await FirebaseFirestore.instance.collection('courses').get();
+    for (final doc in snapshot.docs) {
+      if (doc.data().containsKey('MAC Address')) {
+        final list = List<String>.from(doc.get('MAC Address') as List<dynamic>);
+        for (var m in list) {
+          macs.add((m as String).toUpperCase());
+        }
+      }
+    }
+    return macs;
+  }
+
+  /// Select the best beacon based on conditions:
+  /// - If user is outside (any beacon beyond threshold), pick the one with weakest signal.
+  /// - If two have equal power, pick the one with smaller distance.
+  Beacon _selectBestBeacon(List<Beacon> beacons) {
+    final outside = beacons.any((b) => b.distance > maxAllowedDistance);
+    if (outside) {
+      beacons.sort((a, b) {
+        final cmp = a.power.compareTo(b.power);
+        if (cmp != 0) return cmp;
+        return a.distance.compareTo(b.distance);
+      });
+      return beacons.first;
+    }
+    final inside = beacons
+        .where((b) => b.distance <= maxAllowedDistance && b.power >= minAllowedPower)
+        .toList();
+    if (inside.isNotEmpty) {
+      inside.sort((a, b) {
+        final cmp = b.power.compareTo(a.power);
+        if (cmp != 0) return cmp;
+        return a.distance.compareTo(b.distance);
+      });
+      return inside.first;
+    }
+    beacons.sort((a, b) => b.power.compareTo(a.power));
+    return beacons.first;
+  }
 
   @override
   Widget build(BuildContext context) {
     final formattedTime = DateFormat('yyyy-MM-dd HH:mm:ss').format(timestamp);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF6A1B9A),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            // The Attender logo at top right
-            Positioned(
-              top: 10,
-              right: 10,
-              child: Row(
-                children: [
-                  const Icon(Icons.event_available, color: Colors.white, size: 30),
-                  const SizedBox(width: 8),
-                  Text(
-                    'The Attender',
-                    style: GoogleFonts.poppins(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+    return FutureBuilder<Set<String>>(
+      future: _fetchRecognizedMacs(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final recognized = snapshot.data ?? {};
+        final best = _selectBestBeacon(scannedBeacons);
+        final allowed = recognized.contains(best.mac.toUpperCase()) &&
+            best.distance <= maxAllowedDistance &&
+            best.power >= minAllowedPower;
 
-            // Home button at top left
-            Positioned(
-              top: 10,
-              left: 10,
-              child: IconButton(
-                icon: const Icon(Icons.home, color: Colors.white, size: 30),
-                onPressed: () {
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const AttendanceTrackerPage(),
-                    ),
-                        (route) => false,
-                  );
-                },
-              ),
-            ),
-
-            // Main content
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Attendance Marked Successfully!',
-                      style: GoogleFonts.poppins(
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 30),
-
-                    // Success icon
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      padding: const EdgeInsets.all(20),
-                      child: const Icon(
-                        Icons.check_circle,
-                        size: 100,
-                        color: Colors.greenAccent,
-                      ),
-                    ),
-                    const SizedBox(height: 40),
-
-                    // Table container
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(1),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(15),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 8,
-                            spreadRadius: 2,
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(15),
-                        child: Table(
-                          columnWidths: const {
-                            0: FlexColumnWidth(1),
-                            1: FlexColumnWidth(2),
-                          },
-                          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                          border: TableBorder.all(
-                            color: Colors.white.withOpacity(0.3),
-                            width: 1,
-                          ),
-                          children: [
-                            // Header row
-                            TableRow(
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF6A1B9A).withOpacity(0.8),
-                              ),
-                              children: [
-                                _buildTableCell('Field', null, true),
-                                _buildTableCell('Value', null, true),
-                              ],
-                            ),
-
-                            // MAC Address row
-                            TableRow(
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF6A1B9A).withOpacity(0.2),
-                              ),
-                              children: [
-                                _buildTableCell('Device MAC', Icons.device_hub, false),
-                                _buildTableCell(mac, null, false),
-                              ],
-                            ),
-
-                            // Time row
-                            TableRow(
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF6A1B9A).withOpacity(0.1),
-                              ),
-                              children: [
-                                _buildTableCell('Time', Icons.access_time, false),
-                                _buildTableCell(formattedTime, null, false),
-                              ],
-                            ),
-
-                            // Distance row
-                            TableRow(
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF6A1B9A).withOpacity(0.2),
-                              ),
-                              children: [
-                                _buildTableCell('Distance', Icons.place, false),
-                                _buildTableCell('${distance.toStringAsFixed(2)} meters', null, false),
-                              ],
-                            ),
-                          ],
+        if (!allowed) {
+          return Scaffold(
+            backgroundColor: const Color(0xFF6A1B9A),
+            body: SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error, color: Colors.redAccent, size: 100),
+                      const SizedBox(height: 24),
+                      Text(
+                        'Unrecognized Device or Out of Range',
+                        style: GoogleFonts.poppins(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
                         ),
+                        textAlign: TextAlign.center,
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      Text(
+                        'MAC: ${best.mac}\nDistance: ${best.distance.toStringAsFixed(2)} m\nPower: ${best.power.toStringAsFixed(1)} dBm',
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          color: Colors.white70,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 32),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text('Back', style: GoogleFonts.poppins()),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ],
-        ),
+          );
+        }
+
+        return Scaffold(
+          backgroundColor: const Color(0xFF6A1B9A),
+          body: SafeArea(
+            child: Stack(
+              children: [
+                Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Attendance Marked Successfully!',
+                        style: GoogleFonts.poppins(
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 30),
+                      _buildDetailsCard(best, formattedTime),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailsCard(Beacon beacon, String time) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, spreadRadius: 2)],
+      ),
+      child: Column(
+        children: [
+          _detailRow('Device MAC', beacon.mac),
+          const Divider(),
+          _detailRow('Time', time),
+          const Divider(),
+          _detailRow('Distance', '${beacon.distance.toStringAsFixed(2)} m'),
+          const Divider(),
+          _detailRow('Power', '${beacon.power.toStringAsFixed(1)} dBm'),
+        ],
       ),
     );
   }
 
-  Widget _buildTableCell(String text, IconData? icon, bool isHeader) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+  Widget _detailRow(String field, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          if (icon != null) ...[
-            Icon(icon, size: 18, color: const Color(0xFF00BFA5)),
-            const SizedBox(width: 8),
-          ],
-          Expanded(
-            child: Text(
-              text,
-              overflow: TextOverflow.visible,
-              style: GoogleFonts.poppins(
-                fontSize: 14, // Reduced font size
-                fontWeight: isHeader ? FontWeight.bold : (icon != null ? FontWeight.w600 : FontWeight.normal),
-                color: isHeader ? Colors.white : (icon != null ? const Color(0xFF00BFA5) : const Color(0xFF4A148C)),
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ),
+          Text(field, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14, color: const Color(0xFF4A148C))),
+          Text(value, style: GoogleFonts.poppins(fontStyle: FontStyle.italic, fontSize: 14, color: const Color(0xFF00BFA5))),
         ],
       ),
     );

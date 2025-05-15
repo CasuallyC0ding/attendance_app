@@ -67,7 +67,7 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
       },
       'NETW703': {
         // These will be left as zeros till we know if there will be more beacons or not
-        'MAC Address': '0',
+        'MAC Address': 'BC:57:29:00:4B:3A',
         'Attendance Level': 0,
         'Last Attended': FieldValue.serverTimestamp(),
         'Attendance History': <Timestamp>[],       // ← empty history

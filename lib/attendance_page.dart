@@ -16,7 +16,6 @@ class AttendancePage extends StatefulWidget {
 }
 
 class _AttendancePageState extends State<AttendancePage> {
-  // holds MAC → courseCode
   StreamSubscription<List<ScanResult>>? _scanSubscription;
   Map<String, String> _macToCourse = {};
   bool isScanning = false;
@@ -32,25 +31,24 @@ class _AttendancePageState extends State<AttendancePage> {
   Future<void> _loadMacCourseMap() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-    final doc =
-        await FirebaseFirestore.instance
-            .collection('Attendance Record')
-            .doc(user.uid)
-            .get();
+    final doc = await FirebaseFirestore.instance
+        .collection('Attendance Record')
+        .doc(user.uid)
+        .get();
     if (!doc.exists) return;
 
     final data = doc.data()!;
     final map = <String, String>{};
-    data.forEach((courseCode, courseDataRaw) {
-      final courseData = Map<String, dynamic>.from(courseDataRaw);
-      final mac = (courseData['MAC Address'] ?? '').toString().toUpperCase();
-      if (mac.isNotEmpty && mac != '0' && mac != '1') {
-        map[mac] = courseCode;
+    data.forEach((key, value) {
+      if (value is Map<String, dynamic>) {
+        final mac = (value['MAC Address'] ?? '').toString().toUpperCase();
+        if (mac.isNotEmpty && mac != '0' && mac != '1') {
+          map[mac] = key;
+        }
       }
     });
 
     setState(() => _macToCourse = map);
-    print('Loaded MAC→Course map: $_macToCourse');
   }
 
   Future<void> _checkPermissions() async {
@@ -69,112 +67,88 @@ class _AttendancePageState extends State<AttendancePage> {
         .doc(user.uid);
 
     await docRef.update({
-      // FieldValue.increment(1) adds 1 to whatever the current counter is
       '$courseCode.Attendance Level': FieldValue.increment(1),
       '$courseCode.Last Attended': FieldValue.serverTimestamp(),
     });
 
-    await docRef.collection('History').add({
-            'timestamp': FieldValue.serverTimestamp(),
-
+    // Add history under a subcollection
+    await docRef.collection('Attendance History').add({
+      'timestamp': FieldValue.serverTimestamp(),
     });
   }
 
   Future<void> _startScan() async {
-    // Clear old scan state
     devices.clear();
     setState(() => isScanning = true);
 
-    // Ensure no scan is already running
     await FlutterBluePlus.stopScan();
-
-    // Start a new scan with a 10s timeout
     FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
 
-    // Listen for results
-    _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
-      for (final result in results) {
-        final mac = result.device.remoteId.str.toUpperCase();
-
+    _scanSubscription =
+        FlutterBluePlus.scanResults.listen((List<ScanResult> results) {
+      for (var result in results) {
+        final mac = result.device.remoteId.id.toUpperCase();
         if (_macToCourse.containsKey(mac)) {
-          // Found one of our course beacons
-          final course = _macToCourse[mac]!;
-
-          // Stop scanning
           FlutterBluePlus.stopScan();
           _scanSubscription?.cancel();
           setState(() => isScanning = false);
-
-          // Hand off to connection + validation logic
-          _onBeaconFound(result, course);
+          _onBeaconFound(result);
           return;
         }
-
-        // Otherwise, show it in the list
-        if (!devices.any((d) => d.device.remoteId == result.device.remoteId)) {
+        if (!devices.any((d) => d.device.remoteId.id == mac)) {
           setState(() => devices.add(result));
         }
       }
     });
   }
-  Future<void> _onBeaconFound(ScanResult result, String courseCode) async {
+
+  Future<void> _onBeaconFound(ScanResult result) async {
+    final courseCode = _macToCourse[result.device.remoteId.id.toUpperCase()]!;
     final device = result.device;
-    const insideRssiThreshold = -70; // adjust to your environment
+    const insideRssiThreshold = -70;
 
     try {
-      // 1) Connect (with a 10s timeout)
       await device.connect(timeout: const Duration(seconds: 10));
-
-      // 2) Start polling RSSI every 5 seconds
       int lastRssi = result.rssi;
-      Timer? rssiPoller = Timer.periodic(const Duration(seconds: 5), (_) async {
-        try {
-          lastRssi = await device.readRssi();
-        } catch (_) {}
+      Timer rssiPoller = Timer.periodic(const Duration(seconds: 5), (_) async {
+        lastRssi = await device.readRssi();
       });
 
-      // 3) Wait a full 60s of “connection time”
-      await Future.delayed(const Duration(minutes: 1));
+      await Future.delayed(const Duration(seconds: 60));
 
-      // 4) Check if we’re “inside” by RSSI
+      await Future(() => rssiPoller.cancel());
+      
       if (lastRssi >= insideRssiThreshold) {
-        // Update attendance + history
         await _updateAttendanceFor(courseCode);
 
-        // Navigate to success
+        final beacon = Beacon(
+          mac: result.device.remoteId.id,
+          distance: _calculateDistance(lastRssi),
+          power: lastRssi.toDouble(),
+        );
+
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
             builder: (_) => AttendanceSuccessPage(
-              mac: result.device.remoteId.str,
-              distance: _calculateDistance(lastRssi),
-              timestamp: DateTime.now(),
+              scannedBeacons: [beacon],       // <-- wrap in list
+              timestamp: DateTime.now(),      // <-- timestamp param
             ),
           ),
         );
       } else {
-        // Too weak a signal—treat as “outside”
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please move closer (inside) to check in.')),
+          const SnackBar(
+            content: Text('Move closer to the beacon to check in.'),
+          ),
         );
-        // Optionally restart scanning:
-        // _startScan();
       }
-
-      // 5) Cleanup the RSSI timer
-      rssiPoller.cancel();
     } catch (e) {
-      // Connection or timeout failed
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Connection failed: $e')),
       );
-      // Optionally restart scanning:
-      // _startScan();
     } finally {
-      // Always disconnect when done
-      try {
-        await device.disconnect();
-      } catch (_) {}
+      await device.disconnect();
     }
   }
 
@@ -187,8 +161,8 @@ class _AttendancePageState extends State<AttendancePage> {
 
   double _calculateDistance(int rssi) {
     const txPower = -69;
-    const n = 2;
-    return pow(10, (txPower - rssi) / (10 * n)).toDouble();
+    const pathLossExponent = 2;
+    return pow(10, (txPower - rssi) / (10 * pathLossExponent)).toDouble();
   }
 
   @override
@@ -197,32 +171,16 @@ class _AttendancePageState extends State<AttendancePage> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF4A148C),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.event_available,
-                  color: Colors.white,
-                  size: 24,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'The Attender',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+        title: Row(
+          children: [
+            const Icon(Icons.event_available, color: Colors.white),
+            const SizedBox(width: 8),
+            Text('The Attender', style: GoogleFonts.poppins()),
+          ],
+        ),
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -236,68 +194,29 @@ class _AttendancePageState extends State<AttendancePage> {
           child: Column(
             children: [
               const SizedBox(height: 30),
-              Text(
-                'Nearby Devices',
-                style: GoogleFonts.poppins(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
+              Text('Nearby Devices', style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
               const SizedBox(height: 20),
               ElevatedButton.icon(
                 onPressed: isScanning ? null : _startScan,
                 icon: const Icon(Icons.bluetooth_searching),
                 label: Text('Start Scan', style: GoogleFonts.poppins()),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.deepPurple,
-                ),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.deepPurple),
               ),
               const SizedBox(height: 20),
               Expanded(
                 child: Card(
                   margin: const EdgeInsets.all(16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   child: ListView.builder(
                     itemCount: devices.length,
-                    itemBuilder: (context, index) {
-                      final device = devices[index];
-                      final distance = _calculateDistance(
-                        device.rssi,
-                      ).toStringAsFixed(2);
+                    itemBuilder: (_, i) {
+                      final r = devices[i];
+                      final d = _calculateDistance(r.rssi).toStringAsFixed(2);
                       return ListTile(
                         leading: const Icon(Icons.bluetooth),
-                        title: Text(
-                          device.device.platformName.isNotEmpty
-                              ? device.device.platformName
-                              : 'Unknown Device',
-                          style: GoogleFonts.poppins(),
-                        ),
-                        subtitle: Text(
-                          'MAC: ${device.device.remoteId.str}\nEst. Distance: $distance m',
-                          style: GoogleFonts.poppins(fontSize: 13),
-                        ),
-                        trailing: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.deepPurple.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            'RSSI: ${device.rssi}',
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.deepPurple,
-                            ),
-                          ),
-                        ),
+                        title: Text(r.device.name.isNotEmpty ? r.device.name : 'Unknown', style: GoogleFonts.poppins()),
+                        subtitle: Text('MAC: ${r.device.remoteId.id}\nDist: $d m', style: GoogleFonts.poppins(fontSize: 13)),
+                        trailing: Text('RSSI: ${r.rssi}', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
                       );
                     },
                   ),
