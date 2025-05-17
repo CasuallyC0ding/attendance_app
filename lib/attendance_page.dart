@@ -108,13 +108,13 @@ class _AttendancePageState extends State<AttendancePage> {
     const insideRssiThreshold = -70;
 
     try {
-      await device.connect(timeout: const Duration(seconds: 10));
+      await device.connect(timeout: const Duration(seconds: 300));
       int lastRssi = result.rssi;
       Timer rssiPoller = Timer.periodic(const Duration(seconds: 5), (_) async {
         lastRssi = await device.readRssi();
       });
 
-      await Future.delayed(const Duration(seconds: 60));
+      await Future.delayed(const Duration(seconds: 20));
 
       await Future(() => rssiPoller.cancel());
       

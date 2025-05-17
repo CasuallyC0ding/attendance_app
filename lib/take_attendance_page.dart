@@ -18,8 +18,8 @@ class AttendanceSuccessPage extends StatelessWidget {
   final DateTime timestamp;
 
   // Define thresholds
-  static const double maxAllowedDistance = 5.0; // meters
-  static const double minAllowedPower = -70.0; // dBm
+  static const double maxAllowedDistance = 10.0; // meters (testing values)
+  static const double minAllowedPower = -90.0; // dBm (testing values)
 
   const AttendanceSuccessPage({
     super.key,
@@ -70,12 +70,18 @@ class AttendanceSuccessPage extends StatelessWidget {
     return beacons.first;
   }
 
+  Future<Set<String>> _delayedFetchRecognizedMacs() async {
+  await Future.delayed(const Duration(seconds: 5));
+  return _fetchRecognizedMacs();
+}
+
+
   @override
   Widget build(BuildContext context) {
     final formattedTime = DateFormat('yyyy-MM-dd HH:mm:ss').format(timestamp);
 
     return FutureBuilder<Set<String>>(
-      future: _fetchRecognizedMacs(),
+      future: _delayedFetchRecognizedMacs(),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const Scaffold(
@@ -84,10 +90,8 @@ class AttendanceSuccessPage extends StatelessWidget {
         }
         final recognized = snapshot.data ?? {};
         final best = _selectBestBeacon(scannedBeacons);
-        final allowed = recognized.contains(best.mac.toUpperCase()) &&
-            best.distance <= maxAllowedDistance &&
-            best.power >= minAllowedPower;
-
+        final allowed = recognized.contains(best.mac.toUpperCase()) && best.distance <= maxAllowedDistance && best.power >= minAllowedPower;
+        //bool allowed = true;
         if (!allowed) {
           return Scaffold(
             backgroundColor: const Color(0xFF6A1B9A),
