@@ -19,15 +19,15 @@ class AttendancePage extends StatefulWidget {
 class _AttendancePageState extends State<AttendancePage>
     with SingleTickerProviderStateMixin {
   // Configuration
-  final int scanWindow = 20;             // seconds
-  final int rssiThreshold = -60;         // dBm
+  final int scanWindow = 20; // seconds
+  final int rssiThreshold = -60; // dBm
 
   // State
   bool isScanning = false;
-  bool isCounting = false;               // phase‑2 timer running
+  bool isCounting = false; // phase‑2 timer running
   int timerSeconds = 20;
-  int? currentRssi;                      // last read RSSI
-  double avgRssi = 0;                    // running average
+  int? currentRssi; // last read RSSI
+  double avgRssi = 0; // running average
   final List<int> readings = [];
 
   late String targetMac;
@@ -53,9 +53,10 @@ class _AttendancePageState extends State<AttendancePage>
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
 
-    glowAnimation = Tween<double>(begin: 0.4, end: 1.0).animate(
-      CurvedAnimation(parent: glowController, curve: Curves.easeInOut),
-    );
+    glowAnimation = Tween<double>(
+      begin: 0.4,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: glowController, curve: Curves.easeInOut));
   }
 
   @override
@@ -72,17 +73,18 @@ class _AttendancePageState extends State<AttendancePage>
       Permission.bluetooth,
       Permission.bluetoothScan,
       Permission.bluetoothConnect,
-      Permission.locationWhenInUse
+      Permission.locationWhenInUse,
     ].request();
   }
 
   Future<void> _loadMacCourseMap() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-    final doc = await FirebaseFirestore.instance
-        .collection('Attendance Record')
-        .doc(user.uid)
-        .get();
+    final doc =
+        await FirebaseFirestore.instance
+            .collection('Attendance Record')
+            .doc(user.uid)
+            .get();
     if (!doc.exists) return;
 
     final data = doc.data()!;
@@ -97,25 +99,51 @@ class _AttendancePageState extends State<AttendancePage>
     setState(() => macToCourse = map);
   }
 
-  Future<void> _updateAttendance(String code) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-    final now = DateTime.now();
-    await FirebaseFirestore.instance
-        .collection('Attendance Record')
-        .doc(user.uid)
-        .update({
-      '$code.Attendance Level': FieldValue.increment(1),
-      '$code.Last Attended': FieldValue.serverTimestamp(),
-      '$code.Attendance History': FieldValue.arrayUnion([now]),
-    });
+Future<void> _updateAttendance(String code) async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
+
+  final now = DateTime.now();
+  final docRef = FirebaseFirestore.instance
+      .collection('Attendance Record')
+      .doc(user.uid);
+
+  final snapshot = await docRef.get();
+  final data = snapshot.data();
+
+  if (data == null || !data.containsKey(code)) return;
+
+  final codeData = data[code] as Map<String, dynamic>?;
+
+  if (codeData == null) return;
+
+  final int currentLevel = codeData['Attendance Level'] ?? 0;
+  final Timestamp? lastAttended = codeData['Last Attended'];
+  
+  // Prevent update if level is already 20
+  if (currentLevel >= 20) return;
+
+  // Prevent update if attended in last 24 hours
+  if (lastAttended != null) {
+    final lastDate = lastAttended.toDate();
+    final diff = now.difference(lastDate);
+    if (diff.inHours < 24) return;
   }
+
+  await docRef.update({
+    '$code.Attendance Level': FieldValue.increment(1),
+    '$code.Last Attended': FieldValue.serverTimestamp(),
+    '$code.Attendance History': FieldValue.arrayUnion([now]),
+  });
+}
+
 
   void _startScan() async {
     if (isScanning || macToCourse.isEmpty) return;
 
     // Light haptic
-    if (await Vibration.hasVibrator() ?? false) Vibration.vibrate(duration: 100);
+    if (await Vibration.hasVibrator() ?? false)
+      Vibration.vibrate(duration: 100);
 
     setState(() {
       isScanning = true;
@@ -157,7 +185,11 @@ class _AttendancePageState extends State<AttendancePage>
             avgRssi = readings.reduce((a, b) => a + b) / readings.length;
             // store lastBeacon for navigation
             final dist = pow(10, (-69 - r.rssi) / (10 * 2)).toDouble();
-            lastBeacon = Beacon(mac: mac, distance: dist, power: r.rssi.toDouble());
+            lastBeacon = Beacon(
+              mac: mac,
+              distance: dist,
+              power: r.rssi.toDouble(),
+            );
           });
           break;
         }
@@ -177,45 +209,43 @@ class _AttendancePageState extends State<AttendancePage>
   }
 
   void _finishScan() async {
-  await FlutterBluePlus.stopScan();
-  await scanSub?.cancel();
+    await FlutterBluePlus.stopScan();
+    await scanSub?.cancel();
 
-  if (lastBeacon == null) {
-    // Never saw a registered beacon
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('No registered beacon found')),
-    );
-
-  } else if (avgRssi >= rssiThreshold) {
-    // Strong enough on average!
-    await _updateAttendance(courseCode);
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => AttendanceSuccessPage(
-          scannedBeacons: [lastBeacon!],
-          timestamp: DateTime.now(),
+    if (lastBeacon == null) {
+      // Never saw a registered beacon
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('No registered beacon found')));
+    } else if (avgRssi >= rssiThreshold) {
+      // Strong enough on average!
+      await _updateAttendance(courseCode);
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder:
+              (_) => AttendanceSuccessPage(
+                scannedBeacons: [lastBeacon!],
+                timestamp: DateTime.now(),
+              ),
         ),
-      ),
-    );
+      );
+    } else {
+      // Averaged below threshold
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Avg RSSI too low: ${avgRssi.toStringAsFixed(1)} dBm'),
+        ),
+      );
+    }
 
-  } else {
-    // Averaged below threshold
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Avg RSSI too low: ${avgRssi.toStringAsFixed(1)} dBm'),
-      ),
-    );
+    // Reset UI state
+    setState(() {
+      isScanning = false;
+      isCounting = false;
+      glowController.repeat(reverse: true);
+    });
   }
-
-  // Reset UI state
-  setState(() {
-    isScanning  = false;
-    isCounting  = false;
-    glowController.repeat(reverse: true);
-  });
-}
-
 
   @override
   Widget build(BuildContext context) {
@@ -262,9 +292,13 @@ class _AttendancePageState extends State<AttendancePage>
                         backgroundColor: Colors.white24,
                         valueColor: AlwaysStoppedAnimation(Colors.white),
                       ),
-                      Text('$timerSeconds',
-                          style: GoogleFonts.poppins(
-                              fontSize: 48, color: Colors.white)),
+                      Text(
+                        '$timerSeconds',
+                        style: GoogleFonts.poppins(
+                          fontSize: 48,
+                          color: Colors.white,
+                        ),
+                      ),
                     ],
                   ),
                 )
@@ -273,28 +307,33 @@ class _AttendancePageState extends State<AttendancePage>
                   onTap: _startScan,
                   child: AnimatedBuilder(
                     animation: glowAnimation,
-                    builder: (_, __) => Container(
-                      width: 160,
-                      height: 160,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white,
-                        boxShadow: [
-                          BoxShadow(
-                            color:
-                                Colors.white.withOpacity(glowAnimation.value * .7),
-                            spreadRadius: 12 * glowAnimation.value,
-                            blurRadius: 24 * glowAnimation.value,
-                          )
-                        ],
-                      ),
-                      child: Center(
-                        child: Text('Tap to Scan',
-                            style: GoogleFonts.poppins(
+                    builder:
+                        (_, __) => Container(
+                          width: 160,
+                          height: 160,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.white.withOpacity(
+                                  glowAnimation.value * .7,
+                                ),
+                                spreadRadius: 12 * glowAnimation.value,
+                                blurRadius: 24 * glowAnimation.value,
+                              ),
+                            ],
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Tap to Scan',
+                              style: GoogleFonts.poppins(
                                 fontSize: 18,
-                                color: const Color(0xFF4A148C))),
-                      ),
-                    ),
+                                color: const Color(0xFF4A148C),
+                              ),
+                            ),
+                          ),
+                        ),
                   ),
                 ),
             ],
