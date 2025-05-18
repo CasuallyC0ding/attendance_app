@@ -52,18 +52,24 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
         'Attendance Level': 0,
         'Last Attended': FieldValue.serverTimestamp(),
         'Attendance History': <Timestamp>[],       // ← empty history
+        'end time': "11:30am",
+        'start time': "10:30am",
       },
       'MNGT601': {
         'MAC Address': 'BC:57:29:05:72:73',
         'Attendance Level': 0,
         'Last Attended': FieldValue.serverTimestamp(),
         'Attendance History': <Timestamp>[],       // ← empty history
+        'end time': "9:45am",
+        'start time': "8:15am",
       },
       'NETW603': {
         'MAC Address': 'BC:57:29:02:99:87',
         'Attendance Level': 0,
         'Last Attended': FieldValue.serverTimestamp(),
         'Attendance History': <Timestamp>[],       // ← empty history
+        'end time': "1:15am",
+        'start time': "11:45am",
       },
       'NETW703': {
         // These will be left as zeros till we know if there will be more beacons or not
@@ -71,6 +77,8 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
         'Attendance Level': 0,
         'Last Attended': FieldValue.serverTimestamp(),
         'Attendance History': <Timestamp>[],       // ← empty history
+        'end time': "3:15pm",
+        'start time': "1:45pm",
       },
       'NETW707': {
         // These will be left as zeros till we know if there will be more beacons or not
@@ -78,6 +86,8 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
         'Attendance Level': 0,
         'Last Attended': FieldValue.serverTimestamp(),
         'Attendance History': <Timestamp>[],       // ← empty history
+        'end time': "5:15pm",
+        'start time': "3:45pm",
       },
       // more courses can be added here if needed
     });
