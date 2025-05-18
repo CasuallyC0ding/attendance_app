@@ -9,6 +9,13 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:vibration/vibration.dart';
 
+enum AttendanceResult {
+  success,
+  alreadyTakenToday,
+  limitReached,
+  error,
+}
+
 class AttendancePage extends StatefulWidget {
   const AttendancePage({Key? key}) : super(key: key);
 
@@ -24,10 +31,10 @@ class _AttendancePageState extends State<AttendancePage>
 
   // State
   bool isScanning = false;
-  bool isCounting = false; // phase‑2 timer running
+  bool isCounting = false;
   int timerSeconds = 20;
-  int? currentRssi; // last read RSSI
-  double avgRssi = 0; // running average
+  int? currentRssi;
+  double avgRssi = 0;
   final List<int> readings = [];
 
   late String targetMac;
@@ -35,7 +42,7 @@ class _AttendancePageState extends State<AttendancePage>
   Map<String, String> macToCourse = {};
   Beacon? lastBeacon;
 
-  // Animation for tap circle
+  // Animation
   late AnimationController glowController;
   late Animation<double> glowAnimation;
 
@@ -53,10 +60,9 @@ class _AttendancePageState extends State<AttendancePage>
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
 
-    glowAnimation = Tween<double>(
-      begin: 0.4,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: glowController, curve: Curves.easeInOut));
+    glowAnimation = Tween<double>(begin: 0.4, end: 1.0).animate(
+      CurvedAnimation(parent: glowController, curve: Curves.easeInOut),
+    );
   }
 
   @override
@@ -73,18 +79,17 @@ class _AttendancePageState extends State<AttendancePage>
       Permission.bluetooth,
       Permission.bluetoothScan,
       Permission.bluetoothConnect,
-      Permission.locationWhenInUse,
+      Permission.locationWhenInUse
     ].request();
   }
 
   Future<void> _loadMacCourseMap() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-    final doc =
-        await FirebaseFirestore.instance
-            .collection('Attendance Record')
-            .doc(user.uid)
-            .get();
+    final doc = await FirebaseFirestore.instance
+        .collection('Attendance Record')
+        .doc(user.uid)
+        .get();
     if (!doc.exists) return;
 
     final data = doc.data()!;
@@ -99,51 +104,67 @@ class _AttendancePageState extends State<AttendancePage>
     setState(() => macToCourse = map);
   }
 
-Future<void> _updateAttendance(String code) async {
+  /// Returns true if attendance recorded, false if already taken within 24h
+  Future<AttendanceResult> _updateAttendance(String code) async {
   final user = FirebaseAuth.instance.currentUser;
-  if (user == null) return;
+  if (user == null) return AttendanceResult.error;
 
   final now = DateTime.now();
-  final docRef = FirebaseFirestore.instance
+  final ref = FirebaseFirestore.instance
       .collection('Attendance Record')
       .doc(user.uid);
 
-  final snapshot = await docRef.get();
-  final data = snapshot.data();
-
-  if (data == null || !data.containsKey(code)) return;
-
-  final codeData = data[code] as Map<String, dynamic>?;
-
-  if (codeData == null) return;
-
-  final int currentLevel = codeData['Attendance Level'] ?? 0;
-  final Timestamp? lastAttended = codeData['Last Attended'];
-  
-  // Prevent update if level is already 20
-  if (currentLevel >= 20) return;
-
-  // Prevent update if attended in last 24 hours
-  if (lastAttended != null) {
-    final lastDate = lastAttended.toDate();
-    final diff = now.difference(lastDate);
-    if (diff.inHours < 24) return;
+  final snapshot = await ref.get();
+  if (!snapshot.exists) {
+    await ref.set({
+      code: {
+        'Attendance Level': 1,
+        'Last Attended': now,
+        'Attendance History': [now],
+        'MAC Address': ''
+      }
+    }, SetOptions(merge: true));
+    return AttendanceResult.success;
   }
 
-  await docRef.update({
+  final data = snapshot.data()!;
+  final Map<String, dynamic>? codeData = data[code] as Map<String, dynamic>?;
+
+  if (codeData == null) {
+    await ref.update({
+      '$code.Attendance Level': 1,
+      '$code.Last Attended': now,
+      '$code.Attendance History': [now],
+    });
+    return AttendanceResult.success;
+  }
+
+  final int currentLevel = (codeData['Attendance Level'] ?? 0) as int;
+  if (currentLevel >= 20) {
+    return AttendanceResult.limitReached;
+  }
+
+  final Timestamp? lastAtt = codeData['Last Attended'] as Timestamp?;
+  if (currentLevel > 0 && lastAtt != null) {
+    final diff = now.difference(lastAtt.toDate());
+    if (diff.inHours < 24) {
+      return AttendanceResult.alreadyTakenToday;
+    }
+  }
+
+  await ref.update({
     '$code.Attendance Level': FieldValue.increment(1),
-    '$code.Last Attended': FieldValue.serverTimestamp(),
+    '$code.Last Attended': now,
     '$code.Attendance History': FieldValue.arrayUnion([now]),
   });
+
+  return AttendanceResult.success;
 }
 
 
   void _startScan() async {
     if (isScanning || macToCourse.isEmpty) return;
-
-    // Light haptic
-    if (await Vibration.hasVibrator() ?? false)
-      Vibration.vibrate(duration: 100);
+    if (await Vibration.hasVibrator() ?? false) Vibration.vibrate(duration: 100);
 
     setState(() {
       isScanning = true;
@@ -165,8 +186,6 @@ Future<void> _updateAttendance(String code) async {
     scanSub = FlutterBluePlus.scanResults.listen((results) {
       for (var r in results) {
         final mac = r.device.remoteId.id.toUpperCase();
-
-        // Phase 1: lock on first known beacon
         if (!isCounting && macToCourse.containsKey(mac)) {
           setState(() {
             isCounting = true;
@@ -176,20 +195,13 @@ Future<void> _updateAttendance(String code) async {
           _startCountdown();
           break;
         }
-
-        // Phase 2: collect RSSI for locked beacon
         if (isCounting && mac == targetMac) {
           setState(() {
             currentRssi = r.rssi;
             readings.add(r.rssi);
             avgRssi = readings.reduce((a, b) => a + b) / readings.length;
-            // store lastBeacon for navigation
             final dist = pow(10, (-69 - r.rssi) / (10 * 2)).toDouble();
-            lastBeacon = Beacon(
-              mac: mac,
-              distance: dist,
-              power: r.rssi.toDouble(),
-            );
+            lastBeacon = Beacon(mac: mac, distance: dist, power: r.rssi.toDouble());
           });
           break;
         }
@@ -213,33 +225,41 @@ Future<void> _updateAttendance(String code) async {
     await scanSub?.cancel();
 
     if (lastBeacon == null) {
-      // Never saw a registered beacon
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('No registered beacon found')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('No beacon found')));
     } else if (avgRssi >= rssiThreshold) {
-      // Strong enough on average!
-      await _updateAttendance(courseCode);
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder:
-              (_) => AttendanceSuccessPage(
-                scannedBeacons: [lastBeacon!],
-                timestamp: DateTime.now(),
-              ),
+      final result = await _updateAttendance(courseCode);
+
+switch (result) {
+  case AttendanceResult.success:
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AttendanceSuccessPage(
+          scannedBeacons: [lastBeacon!],
+          timestamp: DateTime.now(),
         ),
-      );
+      ),
+    );
+    break;
+  case AttendanceResult.alreadyTakenToday:
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Attendance already taken within the last 24 hours.')));
+    break;
+  case AttendanceResult.limitReached:
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Attendance limit of 20 reached.')));
+    break;
+  default:
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error recording attendance.')));
+}
+
     } else {
-      // Averaged below threshold
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Avg RSSI too low: ${avgRssi.toStringAsFixed(1)} dBm'),
-        ),
-      );
+        SnackBar(content: Text('Avg RSSI too low: ${avgRssi.toStringAsFixed(1)} dBm')));
     }
 
-    // Reset UI state
     setState(() {
       isScanning = false;
       isCounting = false;
@@ -251,12 +271,12 @@ Future<void> _updateAttendance(String code) async {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF4A148C),
+        backgroundColor: Color(0xFF4A148C),
         leading: BackButton(),
         title: Text('The Attender', style: GoogleFonts.poppins()),
       ),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [Color(0xFF4A148C), Color(0xFF6A1B9A)],
             begin: Alignment.topLeft,
@@ -267,7 +287,6 @@ Future<void> _updateAttendance(String code) async {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Status / live RSSI / average
               Text(
                 isScanning
                     ? (isCounting
@@ -277,8 +296,7 @@ Future<void> _updateAttendance(String code) async {
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(color: Colors.white70),
               ),
-              const SizedBox(height: 20),
-              // Timer or glowing button
+              SizedBox(height: 20),
               if (isCounting)
                 SizedBox(
                   width: 200,
@@ -296,7 +314,7 @@ Future<void> _updateAttendance(String code) async {
                         '$timerSeconds',
                         style: GoogleFonts.poppins(
                           fontSize: 48,
-                          color: Colors.white,
+                          color: Colors.white, 
                         ),
                       ),
                     ],
@@ -307,33 +325,27 @@ Future<void> _updateAttendance(String code) async {
                   onTap: _startScan,
                   child: AnimatedBuilder(
                     animation: glowAnimation,
-                    builder:
-                        (_, __) => Container(
-                          width: 160,
-                          height: 160,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.white.withOpacity(
-                                  glowAnimation.value * .7,
-                                ),
-                                spreadRadius: 12 * glowAnimation.value,
-                                blurRadius: 24 * glowAnimation.value,
-                              ),
-                            ],
+                    builder: (_, __) => Container(
+                      width: 160,
+                      height: 160,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.white.withOpacity(glowAnimation.value * .7),
+                            spreadRadius: 12 * glowAnimation.value,
+                            blurRadius: 24 * glowAnimation.value,
                           ),
-                          child: Center(
-                            child: Text(
-                              'Tap to Scan',
-                              style: GoogleFonts.poppins(
-                                fontSize: 18,
-                                color: const Color(0xFF4A148C),
-                              ),
-                            ),
-                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Text(
+                          'Tap to Scan',
+                          style: GoogleFonts.poppins(fontSize: 18, color: Color(0xFF4A148C)),
                         ),
+                      ),
+                    ),
                   ),
                 ),
             ],
