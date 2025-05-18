@@ -160,6 +160,53 @@ class _AttendancePageState extends State<AttendancePage>
 
   return AttendanceResult.success;
 }
+Future<bool> _isWithinAttendanceWindow(String code) async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return false;
+
+  final doc = await FirebaseFirestore.instance
+      .collection('Attendance Record')
+      .doc(user.uid)
+      .get();
+
+  if (!doc.exists) return false;
+
+  final courseData = doc.data()?[code];
+  if (courseData == null) return false;
+
+  final String? startStr = courseData['start time'];
+  final String? endStr = courseData['end time'];
+  if (startStr == null || endStr == null) return false;
+
+  try {
+    final now = DateTime.now();
+    final date = DateTime(now.year, now.month, now.day);
+
+    DateTime parseTime(String timeStr) {
+      final format = RegExp(r"(\d+):(\d+)(AM|PM)");
+      final match = format.firstMatch(timeStr.trim().toUpperCase());
+      if (match == null) throw FormatException("Invalid time format");
+
+      int hour = int.parse(match.group(1)!);
+      final int minute = int.parse(match.group(2)!);
+      final String period = match.group(3)!;
+
+      if (period == 'PM' && hour != 12) hour += 12;
+      if (period == 'AM' && hour == 12) hour = 0;
+
+      return DateTime(date.year, date.month, date.day, hour, minute);
+    }
+
+    final startTime = parseTime(startStr);
+    final endTime = parseTime(endStr);
+
+    return now.isAfter(startTime) && now.isBefore(endTime);
+  } catch (e) {
+    print("Time parse error: $e");
+    return false;
+  }
+}
+
 
 
   void _startScan() async {
@@ -183,18 +230,30 @@ class _AttendancePageState extends State<AttendancePage>
       // scanMode: ScanMode.lowLatency,
     );
 
-    scanSub = FlutterBluePlus.scanResults.listen((results) {
+    scanSub = FlutterBluePlus.scanResults.listen((results) async {
       for (var r in results) {
         final mac = r.device.remoteId.id.toUpperCase();
         if (!isCounting && macToCourse.containsKey(mac)) {
-          setState(() {
-            isCounting = true;
-            targetMac = mac;
-            courseCode = macToCourse[mac]!;
-          });
-          _startCountdown();
-          break;
-        }
+  final matchedCode = macToCourse[mac]!;
+  final inTimeWindow = await _isWithinAttendanceWindow(matchedCode);
+  
+  if (!inTimeWindow) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('You are outside the allowed attendance time for $matchedCode.')),
+    );
+    continue;
+  }
+
+  setState(() {
+    isCounting = true;
+    targetMac = mac;
+    courseCode = matchedCode;
+  });
+
+  _startCountdown();
+  break;
+}
+
         if (isCounting && mac == targetMac) {
           setState(() {
             currentRssi = r.rssi;
