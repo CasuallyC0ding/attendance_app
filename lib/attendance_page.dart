@@ -7,25 +7,73 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:vibration/vibration.dart';
 
 class AttendancePage extends StatefulWidget {
-  const AttendancePage({super.key});
+  const AttendancePage({Key? key}) : super(key: key);
 
   @override
   State<AttendancePage> createState() => _AttendancePageState();
 }
 
-class _AttendancePageState extends State<AttendancePage> {
-  StreamSubscription<List<ScanResult>>? _scanSubscription;
-  Map<String, String> _macToCourse = {};
+class _AttendancePageState extends State<AttendancePage>
+    with SingleTickerProviderStateMixin {
+  // Configuration
+  final int scanWindow = 20;             // seconds
+  final int rssiThreshold = -60;         // dBm
+
+  // State
   bool isScanning = false;
-  List<ScanResult> devices = [];
+  bool isCounting = false;               // phase‑2 timer running
+  int timerSeconds = 20;
+  int? currentRssi;                      // last read RSSI
+  double avgRssi = 0;                    // running average
+  final List<int> readings = [];
+
+  late String targetMac;
+  late String courseCode;
+  Map<String, String> macToCourse = {};
+  Beacon? lastBeacon;
+
+  // Animation for tap circle
+  late AnimationController glowController;
+  late Animation<double> glowAnimation;
+
+  StreamSubscription<List<ScanResult>>? scanSub;
+  Timer? countdownTimer;
 
   @override
   void initState() {
     super.initState();
     _checkPermissions();
     _loadMacCourseMap();
+
+    glowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+
+    glowAnimation = Tween<double>(begin: 0.4, end: 1.0).animate(
+      CurvedAnimation(parent: glowController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    glowController.dispose();
+    scanSub?.cancel();
+    countdownTimer?.cancel();
+    FlutterBluePlus.stopScan();
+    super.dispose();
+  }
+
+  Future<void> _checkPermissions() async {
+    await [
+      Permission.bluetooth,
+      Permission.bluetoothScan,
+      Permission.bluetoothConnect,
+      Permission.locationWhenInUse
+    ].request();
   }
 
   Future<void> _loadMacCourseMap() async {
@@ -39,148 +87,143 @@ class _AttendancePageState extends State<AttendancePage> {
 
     final data = doc.data()!;
     final map = <String, String>{};
-    data.forEach((key, value) {
-      if (value is Map<String, dynamic>) {
-        final mac = (value['MAC Address'] ?? '').toString().toUpperCase();
-        if (mac.isNotEmpty && mac != '0' && mac != '1') {
-          map[mac] = key;
-        }
+    data.forEach((course, val) {
+      if (val is Map<String, dynamic>) {
+        final mac = (val['MAC Address'] ?? '').toString().toUpperCase();
+        if (mac.isNotEmpty) map[mac] = course;
       }
     });
 
-    setState(() => _macToCourse = map);
+    setState(() => macToCourse = map);
   }
 
-  Future<void> _checkPermissions() async {
-    await Permission.bluetooth.request();
-    await Permission.bluetoothScan.request();
-    await Permission.bluetoothConnect.request();
-    await Permission.locationWhenInUse.request();
-  }
-
-  Future<void> _updateAttendanceFor(String courseCode) async {
+  Future<void> _updateAttendance(String code) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-
-    final docRef = FirebaseFirestore.instance
+    final now = DateTime.now();
+    await FirebaseFirestore.instance
         .collection('Attendance Record')
-        .doc(user.uid);
-
-    await docRef.update({
-      '$courseCode.Attendance Level': FieldValue.increment(1),
-      '$courseCode.Last Attended': FieldValue.serverTimestamp(),
-    });
-
-    // Add history under a subcollection
-    await docRef.collection('Attendance History').add({
-      'timestamp': FieldValue.serverTimestamp(),
+        .doc(user.uid)
+        .update({
+      '$code.Attendance Level': FieldValue.increment(1),
+      '$code.Last Attended': FieldValue.serverTimestamp(),
+      '$code.Attendance History': FieldValue.arrayUnion([now]),
     });
   }
 
-  Future<void> _startScan() async {
-    devices.clear();
-    setState(() => isScanning = true);
+  void _startScan() async {
+    if (isScanning || macToCourse.isEmpty) return;
 
-    await FlutterBluePlus.stopScan();
-    FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
+    // Light haptic
+    if (await Vibration.hasVibrator() ?? false) Vibration.vibrate(duration: 100);
 
-    _scanSubscription =
-        FlutterBluePlus.scanResults.listen((List<ScanResult> results) {
-      for (var result in results) {
-        final mac = result.device.remoteId.id.toUpperCase();
-        if (_macToCourse.containsKey(mac)) {
-          FlutterBluePlus.stopScan();
-          _scanSubscription?.cancel();
-          setState(() => isScanning = false);
-          _onBeaconFound(result);
-          return;
+    setState(() {
+      isScanning = true;
+      isCounting = false;
+      timerSeconds = scanWindow;
+      readings.clear();
+      currentRssi = null;
+      avgRssi = 0;
+      lastBeacon = null;
+      glowController.stop();
+    });
+
+    FlutterBluePlus.startScan(
+      timeout: Duration(seconds: scanWindow * 2),
+      // allowDuplicates: true,
+      // scanMode: ScanMode.lowLatency,
+    );
+
+    scanSub = FlutterBluePlus.scanResults.listen((results) {
+      for (var r in results) {
+        final mac = r.device.remoteId.id.toUpperCase();
+
+        // Phase 1: lock on first known beacon
+        if (!isCounting && macToCourse.containsKey(mac)) {
+          setState(() {
+            isCounting = true;
+            targetMac = mac;
+            courseCode = macToCourse[mac]!;
+          });
+          _startCountdown();
+          break;
         }
-        if (!devices.any((d) => d.device.remoteId.id == mac)) {
-          setState(() => devices.add(result));
+
+        // Phase 2: collect RSSI for locked beacon
+        if (isCounting && mac == targetMac) {
+          setState(() {
+            currentRssi = r.rssi;
+            readings.add(r.rssi);
+            avgRssi = readings.reduce((a, b) => a + b) / readings.length;
+            // store lastBeacon for navigation
+            final dist = pow(10, (-69 - r.rssi) / (10 * 2)).toDouble();
+            lastBeacon = Beacon(mac: mac, distance: dist, power: r.rssi.toDouble());
+          });
+          break;
         }
       }
     });
   }
 
-  Future<void> _onBeaconFound(ScanResult result) async {
-    final courseCode = _macToCourse[result.device.remoteId.id.toUpperCase()]!;
-    final device = result.device;
-    const insideRssiThreshold = -70;
-
-    try {
-      await device.connect(timeout: const Duration(seconds: 300));
-      int lastRssi = result.rssi;
-      Timer rssiPoller = Timer.periodic(const Duration(seconds: 5), (_) async {
-        lastRssi = await device.readRssi();
-      });
-
-      await Future.delayed(const Duration(seconds: 20));
-
-      await Future(() => rssiPoller.cancel());
-      
-      if (lastRssi >= insideRssiThreshold) {
-        await _updateAttendanceFor(courseCode);
-
-        final beacon = Beacon(
-          mac: result.device.remoteId.id,
-          distance: _calculateDistance(lastRssi),
-          power: lastRssi.toDouble(),
-        );
-
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => AttendanceSuccessPage(
-              scannedBeacons: [beacon],       // <-- wrap in list
-              timestamp: DateTime.now(),      // <-- timestamp param
-            ),
-          ),
-        );
+  void _startCountdown() {
+    countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (timerSeconds <= 0) {
+        t.cancel();
+        _finishScan();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Move closer to the beacon to check in.'),
-          ),
-        );
+        setState(() => timerSeconds--);
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Connection failed: $e')),
-      );
-    } finally {
-      await device.disconnect();
-    }
+    });
   }
 
-  @override
-  void dispose() {
-    _scanSubscription?.cancel();
-    FlutterBluePlus.stopScan();
-    super.dispose();
+  void _finishScan() async {
+  await FlutterBluePlus.stopScan();
+  await scanSub?.cancel();
+
+  if (lastBeacon == null) {
+    // Never saw a registered beacon
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('No registered beacon found')),
+    );
+
+  } else if (avgRssi >= rssiThreshold) {
+    // Strong enough on average!
+    await _updateAttendance(courseCode);
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AttendanceSuccessPage(
+          scannedBeacons: [lastBeacon!],
+          timestamp: DateTime.now(),
+        ),
+      ),
+    );
+
+  } else {
+    // Averaged below threshold
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Avg RSSI too low: ${avgRssi.toStringAsFixed(1)} dBm'),
+      ),
+    );
   }
 
-  double _calculateDistance(int rssi) {
-    const txPower = -69;
-    const pathLossExponent = 2;
-    return pow(10, (txPower - rssi) / (10 * pathLossExponent)).toDouble();
-  }
+  // Reset UI state
+  setState(() {
+    isScanning  = false;
+    isCounting  = false;
+    glowController.repeat(reverse: true);
+  });
+}
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF4A148C),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Row(
-          children: [
-            const Icon(Icons.event_available, color: Colors.white),
-            const SizedBox(width: 8),
-            Text('The Attender', style: GoogleFonts.poppins()),
-          ],
-        ),
+        leading: BackButton(),
+        title: Text('The Attender', style: GoogleFonts.poppins()),
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -190,38 +233,70 @@ class _AttendancePageState extends State<AttendancePage> {
             end: Alignment.bottomRight,
           ),
         ),
-        child: SafeArea(
+        child: Center(
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const SizedBox(height: 30),
-              Text('Nearby Devices', style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: isScanning ? null : _startScan,
-                icon: const Icon(Icons.bluetooth_searching),
-                label: Text('Start Scan', style: GoogleFonts.poppins()),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.deepPurple),
+              // Status / live RSSI / average
+              Text(
+                isScanning
+                    ? (isCounting
+                        ? 'Measuring $targetMac\nRSSI: ${currentRssi ?? '-'} dBm\nAvg: ${avgRssi.toStringAsFixed(1)} dBm'
+                        : 'Searching for any registered beacon…')
+                    : 'Tap to start scanning',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(color: Colors.white70),
               ),
               const SizedBox(height: 20),
-              Expanded(
-                child: Card(
-                  margin: const EdgeInsets.all(16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  child: ListView.builder(
-                    itemCount: devices.length,
-                    itemBuilder: (_, i) {
-                      final r = devices[i];
-                      final d = _calculateDistance(r.rssi).toStringAsFixed(2);
-                      return ListTile(
-                        leading: const Icon(Icons.bluetooth),
-                        title: Text(r.device.name.isNotEmpty ? r.device.name : 'Unknown', style: GoogleFonts.poppins()),
-                        subtitle: Text('MAC: ${r.device.remoteId.id}\nDist: $d m', style: GoogleFonts.poppins(fontSize: 13)),
-                        trailing: Text('RSSI: ${r.rssi}', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-                      );
-                    },
+              // Timer or glowing button
+              if (isCounting)
+                SizedBox(
+                  width: 200,
+                  height: 200,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CircularProgressIndicator(
+                        value: timerSeconds / scanWindow,
+                        strokeWidth: 12,
+                        backgroundColor: Colors.white24,
+                        valueColor: AlwaysStoppedAnimation(Colors.white),
+                      ),
+                      Text('$timerSeconds',
+                          style: GoogleFonts.poppins(
+                              fontSize: 48, color: Colors.white)),
+                    ],
+                  ),
+                )
+              else
+                GestureDetector(
+                  onTap: _startScan,
+                  child: AnimatedBuilder(
+                    animation: glowAnimation,
+                    builder: (_, __) => Container(
+                      width: 160,
+                      height: 160,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white,
+                        boxShadow: [
+                          BoxShadow(
+                            color:
+                                Colors.white.withOpacity(glowAnimation.value * .7),
+                            spreadRadius: 12 * glowAnimation.value,
+                            blurRadius: 24 * glowAnimation.value,
+                          )
+                        ],
+                      ),
+                      child: Center(
+                        child: Text('Tap to Scan',
+                            style: GoogleFonts.poppins(
+                                fontSize: 18,
+                                color: const Color(0xFF4A148C))),
+                      ),
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
         ),

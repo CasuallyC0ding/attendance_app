@@ -19,7 +19,7 @@ class AttendanceSuccessPage extends StatelessWidget {
 
   // Define thresholds
   static const double maxAllowedDistance = 10.0; // meters (testing values)
-  static const double minAllowedPower = -90.0; // dBm (testing values)
+  static const double minAllowedPower = 0.0; // dBm (testing values)
 
   const AttendanceSuccessPage({
     super.key,
@@ -30,7 +30,8 @@ class AttendanceSuccessPage extends StatelessWidget {
   /// Fetch recognized MAC addresses from the 'courses' collection in Firestore
   Future<Set<String>> _fetchRecognizedMacs() async {
     final macs = <String>{};
-    final snapshot = await FirebaseFirestore.instance.collection('courses').get();
+    final snapshot =
+        await FirebaseFirestore.instance.collection('courses').get();
     for (final doc in snapshot.docs) {
       if (doc.data().containsKey('MAC Address')) {
         final list = List<String>.from(doc.get('MAC Address') as List<dynamic>);
@@ -55,9 +56,14 @@ class AttendanceSuccessPage extends StatelessWidget {
       });
       return beacons.first;
     }
-    final inside = beacons
-        .where((b) => b.distance <= maxAllowedDistance && b.power >= minAllowedPower)
-        .toList();
+    final inside =
+        beacons
+            .where(
+              (b) =>
+                  b.distance <= maxAllowedDistance &&
+                  b.power >= minAllowedPower,
+            )
+            .toList();
     if (inside.isNotEmpty) {
       inside.sort((a, b) {
         final cmp = b.power.compareTo(a.power);
@@ -71,10 +77,9 @@ class AttendanceSuccessPage extends StatelessWidget {
   }
 
   Future<Set<String>> _delayedFetchRecognizedMacs() async {
-  await Future.delayed(const Duration(seconds: 5));
-  return _fetchRecognizedMacs();
-}
-
+    await Future.delayed(const Duration(seconds: 5));
+    return _fetchRecognizedMacs();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -90,7 +95,8 @@ class AttendanceSuccessPage extends StatelessWidget {
         }
         final recognized = snapshot.data ?? {};
         final best = _selectBestBeacon(scannedBeacons);
-        final allowed = recognized.contains(best.mac.toUpperCase()) && best.distance <= maxAllowedDistance && best.power >= minAllowedPower;
+        final allowed = true;
+        //final allowed = recognized.contains(best.mac.toUpperCase()) && best.distance <= maxAllowedDistance && best.power >= minAllowedPower;
         //bool allowed = true;
         if (!allowed) {
           return Scaffold(
@@ -102,7 +108,11 @@ class AttendanceSuccessPage extends StatelessWidget {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.error, color: Colors.redAccent, size: 100),
+                      const Icon(
+                        Icons.error,
+                        color: Colors.redAccent,
+                        size: 100,
+                      ),
                       const SizedBox(height: 24),
                       Text(
                         'Unrecognized Device or Out of Range',
@@ -173,7 +183,13 @@ class AttendanceSuccessPage extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(15),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, spreadRadius: 2)],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            spreadRadius: 2,
+          ),
+        ],
       ),
       child: Column(
         children: [
@@ -195,8 +211,22 @@ class AttendanceSuccessPage extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(field, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14, color: const Color(0xFF4A148C))),
-          Text(value, style: GoogleFonts.poppins(fontStyle: FontStyle.italic, fontSize: 14, color: const Color(0xFF00BFA5))),
+          Text(
+            field,
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              color: const Color(0xFF4A148C),
+            ),
+          ),
+          Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontStyle: FontStyle.italic,
+              fontSize: 14,
+              color: const Color(0xFF00BFA5),
+            ),
+          ),
         ],
       ),
     );

@@ -36,14 +36,13 @@ class _AttendanceRecordPageState extends State<AttendanceRecordPage> {
 
       if (!doc.exists) return null;
       final data = doc.data()!;
-      final courseData = data[widget.course]
-          ?? data[widget.course.toUpperCase()]
-          ?? data[widget.course.toLowerCase()];
+      final courseData = data[widget.course];
       if (courseData == null) return null;
 
       return {
         'Attendance Level': courseData['Attendance Level'] ?? 0,
         'Last Attended': courseData['Last Attended'],
+        'Attendance History': courseData['Attendance History'] ?? [],
       };
     } catch (_) {
       return null;
@@ -60,86 +59,62 @@ class _AttendanceRecordPageState extends State<AttendanceRecordPage> {
     return total > 0 ? attended / total * 100 : 0;
   }
 
-Future<void> _deleteLastAttendance(int currentLevel) async {
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) return;
+  Future<void> _deleteLastAttendance(int currentLevel) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
-  final recordRef = FirebaseFirestore.instance
-      .collection('Attendance Record')
-      .doc(user.uid);
+    final recordRef = FirebaseFirestore.instance
+        .collection('Attendance Record')
+        .doc(user.uid);
 
-  // 1) Read the whole document once
-  final snap = await recordRef.get();
-  if (!snap.exists) return;
+    final doc = await recordRef.get();
+    if (!doc.exists) return;
 
-  final data = snap.data()![widget.course] as Map<String, dynamic>? ?? {};
-  // Pull the history array (or empty list if missing)
-  final historyList = List<Timestamp>.from(
-    (data['Attendance History'] as List<dynamic>? ?? [])
-        .whereType<Timestamp>(),
-  );
-  if (historyList.isEmpty) return;  // nothing to delete
+    final courseData = doc.data()![widget.course] as Map<String, dynamic>;
+    final history = List<dynamic>.from(courseData['Attendance History'] ?? []);
 
-  // 2) Identify last and second‑last timestamps
-  final lastTs = historyList.removeLast();
-  final newLastTs = historyList.isNotEmpty ? historyList.last : null;
+    if (history.isEmpty) return;
 
-  // 3) Batch‑update:
-  final batch = FirebaseFirestore.instance.batch();
-  batch.update(recordRef, {
-    // decrement level, never below 0
-    '${widget.course}.Attendance Level':
-       (currentLevel - 1).clamp(0, double.infinity).toInt(),
-    // set new Last Attended (or null)
-    '${widget.course}.Last Attended': newLastTs,
-    // remove the last timestamp from the array
-    '${widget.course}.Attendance History':
-      FieldValue.arrayRemove([lastTs]),
-  });
+    final lastAttendance = history.last;
+    final newLevel = (currentLevel - 1).clamp(0, currentLevel);
 
-  // 4) Commit & refresh UI
-  await batch.commit();
+    await recordRef.update({
+      '${widget.course}.Attendance Level': newLevel,
+      '${widget.course}.Attendance History': FieldValue.arrayRemove([lastAttendance]),
+      '${widget.course}.Last Attended': history.length > 1 ? history[history.length - 2] : null
+    });
 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
 
-  // Defer the dialog until after this frame, and ensure widget is still mounted
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogCtx) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF6A1B9A),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          title: Text('Deleted', style: GoogleFonts.poppins(color: Colors.white)),
-          content: Text(
-            'Last attendance record removed successfully.',
-            style: GoogleFonts.poppins(color: Colors.white70),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                if (Navigator.of(dialogCtx).canPop()) Navigator.of(dialogCtx).pop();
-              },
-              child: Text('Close', style: GoogleFonts.poppins(color: Colors.white)),
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogCtx) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF6A1B9A),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            title: Text('Deleted', style: GoogleFonts.poppins(color: Colors.white)),
+            content: Text(
+              'Last attendance record removed successfully.',
+              style: GoogleFonts.poppins(color: Colors.white70),
             ),
-          ],
-        );
-      },
-    );
-  });
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogCtx).pop(),
+                child: Text('Close', style: GoogleFonts.poppins(color: Colors.white)),
+              ),
+            ],
+          );
+        },
+      );
+    });
 
-  // Finally update your UI state
-  if (!mounted) return;
-
-  // REFRESH UI
-  setState(() {
-    _hasDeletedOnce = true;
-    _attendanceData = _fetchAttendanceData();
-  });
-}
-
+    setState(() {
+      _hasDeletedOnce = true;
+      _attendanceData = _fetchAttendanceData();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -158,9 +133,6 @@ Future<void> _deleteLastAttendance(int currentLevel) async {
         title: Text('The Attender', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.white)),
       ),
       body: Container(
-        
-        width: double.infinity,
-        height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -187,33 +159,12 @@ Future<void> _deleteLastAttendance(int currentLevel) async {
             final canDelete = last != null && DateTime.now().difference(last.toDate()).inMinutes <= 15;
             final canDeleteNow = canDelete && !_hasDeletedOnce && level > 0;
 
-
-            String gif;
-            String msg;
-            if (perc >= 100) {
-              gif = 'assets/gifs/goku_5.gif';
-              msg = "Perfect! You're Super Saiyan strong!";
-            } else if (perc >= 80) {
-              gif = 'assets/gifs/goku_4.gif';
-              msg = "Awesome! Keep powering up!";
-            } else if (perc >= 60) {
-              gif = 'assets/gifs/goku_3.gif';
-              msg = "Great job! Almost there!";
-            } else if (perc >= 40) {
-              gif = 'assets/gifs/goku_2.gif';
-              msg = "Nice start! Train harder!";
-            } else {
-              gif = 'assets/gifs/goku_1.gif';
-              msg = "Let’s power up! You can do it!";
-            }
-
             return SingleChildScrollView(
               padding: const EdgeInsets.symmetric(vertical: 30),
               child: Column(
                 children: [
                   Text('Attendance Record', style: GoogleFonts.poppins(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
                   const SizedBox(height: 20),
-                  // Summary table
                   Container(
                     margin: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
                     padding: const EdgeInsets.all(16),
@@ -230,7 +181,6 @@ Future<void> _deleteLastAttendance(int currentLevel) async {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  // View history button
                   ElevatedButton.icon(
                     onPressed: () => Navigator.push(
                       context,
@@ -241,40 +191,11 @@ Future<void> _deleteLastAttendance(int currentLevel) async {
                     style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00BFA5)),
                   ),
                   const SizedBox(height: 10),
-                  // Delete button
                   ElevatedButton.icon(
                     onPressed: canDeleteNow ? () => _deleteLastAttendance(level) : null,
                     icon: const Icon(Icons.delete_forever, color: Colors.white),
                     label: Text('Delete Last Attendance', style: GoogleFonts.poppins(color: Colors.white)),
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-                  ),
-                  const SizedBox(height: 30),
-                  // GIF & message
-                  Container(
-                    width: MediaQuery.of(context).size.width * 0.8,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(15)),
-                    child: Column(
-                       children: [
-                        Image.asset(gif),
-                        const SizedBox(height: 16),
-                        Text(
-                          msg,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '${perc.toStringAsFixed(1)}% attendance',
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontStyle: FontStyle.italic,
-                            color: Colors.black54,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
                   ),
                 ],
               ),
@@ -284,6 +205,7 @@ Future<void> _deleteLastAttendance(int currentLevel) async {
       ),
     );
   }
+
   TableRow _buildRow(String a, String b, {bool isHeader = false}) {
     final bg = isHeader ? const Color(0xFF4A148C).withOpacity(0.8) : Colors.transparent;
     return TableRow(
@@ -305,9 +227,7 @@ Future<void> _deleteLastAttendance(int currentLevel) async {
         style: GoogleFonts.poppins(
           fontSize: header ? 16 : 14,
           fontWeight: header ? FontWeight.bold : FontWeight.normal,
-          color: header
-              ? Colors.white
-              : (isLeft ? const Color(0xFF4A148C) : const Color(0xFF6A1B9A)),
+          color: header ? Colors.white : (isLeft ? const Color(0xFF4A148C) : const Color(0xFF6A1B9A)),
           fontStyle: header ? FontStyle.normal : FontStyle.italic,
         ),
       ),
