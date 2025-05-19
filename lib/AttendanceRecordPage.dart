@@ -229,6 +229,10 @@ class _AttendanceRecordPageState extends State<AttendanceRecordPage> {
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(15)),
                     child: Column(
+                      // ← Center everything vertically
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      // ← Center everything horizontally
+                      crossAxisAlignment: CrossAxisAlignment.center,
                        children: [
                         Image.asset(gifPath),
                         const SizedBox(height: 16),
