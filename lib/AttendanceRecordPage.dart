@@ -225,12 +225,13 @@ class _AttendanceRecordPageState extends State<AttendanceRecordPage> {
                   
                   Container(
                     width: MediaQuery.of(context).size.width * 0.8,
+                    height: 280,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(15)),
                     child: Column(
                        children: [
                         Image.asset(gifPath),
-                        const SizedBox(height: 30),
+                        const SizedBox(height: 16),
                         Text(
                           message,
                           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
