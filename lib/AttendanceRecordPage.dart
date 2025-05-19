@@ -120,6 +120,7 @@ class _AttendanceRecordPageState extends State<AttendanceRecordPage> {
   Widget build(BuildContext context) {
     const totalClasses = 20;
     return Scaffold(
+      extendBody: true,
       appBar: AppBar(
         backgroundColor: const Color(0xFF4A148C),
         centerTitle: true,
@@ -159,6 +160,27 @@ class _AttendanceRecordPageState extends State<AttendanceRecordPage> {
             final canDelete = last != null && DateTime.now().difference(last.toDate()).inMinutes <= 15;
             final canDeleteNow = canDelete && !_hasDeletedOnce && level > 0;
 
+            // pick a GIF & message based on perc
+            String gifPath;
+            String message;
+
+            if (perc >= 100) {
+              gifPath = 'assets/gifs/goku_5.gif';
+              message = "Perfect! You're Super Saiyan strong!";
+            } else if (perc >= 80) {
+              gifPath = 'assets/gifs/goku_4.gif';
+              message = "Awesome! Keep powering up!";
+            } else if (perc >= 60) {
+              gifPath = 'assets/gifs/goku_3.gif';
+              message = "Great job! Almost there!";
+            } else if (perc >= 40) {
+              gifPath = 'assets/gifs/goku_2.gif';
+              message = "Nice start! Train harder!";
+            } else {
+              gifPath = 'assets/gifs/goku_1.gif';
+              message = "Let’s power up! You can do it!";
+            }
+
             return SingleChildScrollView(
               padding: const EdgeInsets.symmetric(vertical: 30),
               child: Column(
@@ -197,6 +219,38 @@ class _AttendanceRecordPageState extends State<AttendanceRecordPage> {
                     label: Text('Delete Last Attendance', style: GoogleFonts.poppins(color: Colors.white)),
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
                   ),
+
+                  
+                  // GIF & message
+                  
+                  Container(
+                    width: MediaQuery.of(context).size.width * 0.8,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(15)),
+                    child: Column(
+                       children: [
+                        Image.asset(gifPath),
+                        const SizedBox(height: 30),
+                        Text(
+                          message,
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${perc.toStringAsFixed(1)}% attendance',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontStyle: FontStyle.italic,
+                            color: Colors.black54,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+
+
                 ],
               ),
             );
